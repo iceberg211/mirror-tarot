@@ -10,6 +10,7 @@ import ReadingResult from '@/components/tarot/ReadingResult';
 import { SelectedCard, ParsedReading, SpreadType } from '@/lib/tarot/types';
 import { getSpreadByType } from '@/lib/tarot/spreads';
 import { saveLocalReading } from '@/lib/db/localJournal';
+import SharePoster from '@/components/tarot/SharePoster';
 
 // 默认的快捷追问建议
 const defaultSuggestions = [
@@ -102,6 +103,7 @@ function ReadingNewContent() {
   const [chatLoading, setChatLoading] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [showShare, setShowShare] = useState(false);
 
   // 页面加载时自动静默调用 draw API
   useEffect(() => {
@@ -352,13 +354,22 @@ function ReadingNewContent() {
 
             {/* 自动静默保存提示 */}
             {!generating && savedJournalId && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="w-full max-w-sm px-6 py-2 rounded-lg bg-[#11131A]/35 border border-gold/5 text-center text-[10px] text-gold-muted/65 font-serif tracking-widest mb-6"
-              >
-                ✦ 已同步并保存到您的情绪日记 ✦
-              </motion.div>
+              <div className="w-full flex flex-col items-center gap-3.5 mb-6">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="w-full max-w-sm px-6 py-2 rounded-lg bg-[#11131A]/35 border border-gold/5 text-center text-[10px] text-gold-muted/65 font-serif tracking-widest"
+                >
+                  ✦ 已同步并保存到您的情绪日记 ✦
+                </motion.div>
+                
+                <button
+                  onClick={() => setShowShare(true)}
+                  className="px-4 py-2 rounded-lg border border-gold/25 bg-gold/5 text-[10px] text-gold font-serif tracking-widest hover:bg-gold/10 transition-all cursor-pointer shadow-gold-glow"
+                >
+                  ✦ 生成分享金句海报 ✦
+                </button>
+              </div>
             )}
 
             {/* 追问聊天对话区 */}
@@ -445,6 +456,16 @@ function ReadingNewContent() {
         )}
 
       </div>
+
+      {showShare && serverCards.length > 0 && (
+        <SharePoster
+          question={question}
+          mood={mood}
+          mainCard={serverCards[0]}
+          intuitiveSummary={parsedReading.intuitiveSummary}
+          onClose={() => setShowShare(false)}
+        />
+      )}
     </main>
   );
 }

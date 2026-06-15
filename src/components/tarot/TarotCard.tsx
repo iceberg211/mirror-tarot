@@ -62,12 +62,8 @@ export default function TarotCard({
           {/* 四角框饰 */}
           <div className="absolute inset-1 border border-gold/15 rounded-[10px] pointer-events-none" />
 
-          {/* 正逆位旋转容器：如果是逆位且已经 revealed，整体内容翻转 180 度 */}
-          <div
-            className={`w-full h-full flex flex-col justify-between transition-transform duration-500 ${
-              card?.orientation === 'reversed' ? 'rotate-180' : ''
-            }`}
-          >
+          {/* 正逆位容器外壳保持正立 */}
+          <div className="w-full h-full flex flex-col justify-between">
             {/* 顶部牌名 (英文) */}
             <div className="text-[10px] text-gold-muted font-serif tracking-widest text-center mt-1 uppercase">
               {card?.name || 'TAROT CARD'}
@@ -81,11 +77,15 @@ export default function TarotCard({
                   src={card.image}
                   alt={card.zhName}
                   onError={() => setImageError(true)}
-                  className="w-full h-full object-cover transition-opacity duration-300"
+                  className={`w-full h-full object-cover transition-transform duration-500 ${
+                    card?.orientation === 'reversed' ? 'rotate-180' : ''
+                  }`}
                 />
               ) : (
                 /* 极其唯美的金色占位符，如果图片丢失或未下载好时渲染 */
-                <div className="w-full h-full p-4 flex flex-col justify-between items-center bg-gradient-to-b from-[#090C12] to-[#040608] relative">
+                <div className={`w-full h-full p-4 flex flex-col justify-between items-center bg-gradient-to-b from-[#090C12] to-[#040608] relative transition-transform duration-500 ${
+                  card?.orientation === 'reversed' ? 'rotate-180' : ''
+                }`}>
                   {/* 金色线条图案 */}
                   <div className="absolute inset-3 border border-dashed border-gold/5 rounded-md" />
                   
@@ -104,10 +104,10 @@ export default function TarotCard({
                 </div>
               )}
 
-              {/* 正位/逆位的水印文本，浮在卡面中央偏下 */}
-              <div className="absolute bottom-2 left-0 right-0 flex justify-center pointer-events-none">
-                <span className="text-[9px] font-mono tracking-widest text-gold/40 bg-[#0E1017]/85 px-2 py-0.5 rounded-full border border-gold/10">
-                  {card?.orientation === 'reversed' ? 'REVERSED / 逆位' : 'UPRIGHT / 正位'}
+              {/* 正位/逆位的水印文本：悬浮浮层，在任何情况下保持正立 */}
+              <div className="absolute bottom-2 left-0 right-0 flex justify-center pointer-events-none z-30">
+                <span className="text-[9px] font-mono tracking-widest text-gold/80 bg-[#0E1017]/90 px-2.5 py-0.5 rounded-full border border-gold/15 shadow-md">
+                  {card?.orientation === 'reversed' ? 'REVERSED ✦ 逆位' : 'UPRIGHT ✦ 正位'}
                 </span>
               </div>
             </div>

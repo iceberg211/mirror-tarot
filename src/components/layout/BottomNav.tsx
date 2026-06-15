@@ -3,13 +3,14 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Compass, BookOpen, User } from 'lucide-react';
+import { Compass, BookOpen, User, Book } from 'lucide-react';
 
 export default function BottomNav() {
   const pathname = usePathname();
 
   const navItems = [
     { name: '首页', href: '/', icon: Compass },
+    { name: '牌库', href: '/deck', icon: Book },
     { name: '日记', href: '/journal', icon: BookOpen },
   ];
 

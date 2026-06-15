@@ -9,6 +9,7 @@ import ReadingResult from '@/components/tarot/ReadingResult';
 import BottomNav from '@/components/layout/BottomNav';
 import { getLocalReadingById, deleteLocalReading, JournalEntry } from '@/lib/db/localJournal';
 import { getSpreadByType } from '@/lib/tarot/spreads';
+import SharePoster from '@/components/tarot/SharePoster';
 
 const defaultSuggestions = [
   '结合我的感情问题解释',
@@ -28,6 +29,7 @@ export default function ReadingDetailPage() {
 
   // 追问对话状态
   const [chatInput, setChatInput] = useState('');
+  const [showShare, setShowShare] = useState(false);
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
   const [chatLoading, setChatLoading] = useState(false);
 
@@ -201,6 +203,16 @@ export default function ReadingDetailPage() {
           generating={false}
         />
 
+        {/* 生成海报按钮 */}
+        <div className="w-full flex justify-center mb-6">
+          <button
+            onClick={() => setShowShare(true)}
+            className="px-4 py-2 rounded-lg border border-gold/25 bg-gold/5 text-[10px] text-gold font-serif tracking-widest hover:bg-gold/10 transition-all cursor-pointer shadow-gold-glow"
+          >
+            ✦ 生成分享金句海报 ✦
+          </button>
+        </div>
+
         {/* 追问聊天对话区 */}
         <div className="w-full border-t border-gold/10 pt-6 mt-2 flex flex-col gap-4">
           <div className="flex items-center gap-2 text-gold px-1">
@@ -277,6 +289,16 @@ export default function ReadingDetailPage() {
         </div>
 
       </div>
+
+      {showShare && entry.cards.length > 0 && (
+        <SharePoster
+          question={entry.question}
+          mood={entry.mood}
+          mainCard={entry.cards[0]}
+          intuitiveSummary={entry.reading.intuitiveSummary}
+          onClose={() => setShowShare(false)}
+        />
+      )}
 
       <BottomNav />
     </main>
