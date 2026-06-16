@@ -11,6 +11,9 @@ import { SelectedCard, ParsedReading, SpreadType } from '@/lib/tarot/types';
 import { getSpreadByType } from '@/lib/tarot/spreads';
 import { saveLocalReading } from '@/lib/db/localJournal';
 import SharePoster from '@/components/tarot/SharePoster';
+import { getTodayMoonPhase, getMoonSvgPath } from '@/lib/tarot/moonPhase';
+import { useAudio } from '@/hooks/useAudio';
+import BreathingZen from '@/components/tarot/BreathingZen';
 
 // 默认的快捷追问建议
 const defaultSuggestions = [
@@ -80,6 +83,7 @@ function ReadingNewContent() {
   const spreadType = (searchParams.get('spreadType') || 'three_cards') as SpreadType;
 
   const spread = getSpreadByType(spreadType);
+  const moonPhase = getTodayMoonPhase();
 
   // 状态机步骤: 'draw' (抽牌中) | 'reveal' (点击翻开卡片) | 'reading' (AI解读生成中)
   const [step, setStep] = useState<'draw' | 'reveal' | 'reading'>('draw');
@@ -96,6 +100,7 @@ function ReadingNewContent() {
   const [readingText, setReadingText] = useState('');
   const [generating, setGenerating] = useState(false);
   const [savedJournalId, setSavedJournalId] = useState('');
+  const [readingError, setReadingError] = useState<string | null>(null);
 
   // 追问对话状态
   const [chatInput, setChatInput] = useState('');
@@ -104,6 +109,8 @@ function ReadingNewContent() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [showShare, setShowShare] = useState(false);
+  const [showZen, setShowZen] = useState(false);
+  const { playAmbient, stopAmbient } = useAudio();
 
   // 页面加载时自动静默调用 draw API
   useEffect(() => {
@@ -151,6 +158,8 @@ function ReadingNewContent() {
     setStep('reading');
     setGenerating(true);
     setReadingText('');
+    setReadingError(null);
+    playAmbient();
 
     try {
       const response = await fetch('/api/reading', {
@@ -164,7 +173,21 @@ function ReadingNewContent() {
         }),
       });
 
-      if (!response.body) throw new Error('ReadableStream not supported');
+      if (!response.ok) {
+        let errMsg = `HTTP 错误！状态码: ${response.status}`;
+        try {
+          const errData = await response.json();
+          errMsg = errData.error || errMsg;
+        } catch (_) {
+          try {
+            const txt = await response.text();
+            if (txt) errMsg = txt;
+          } catch (_) {}
+        }
+        throw new Error(errMsg);
+      }
+
+      if (!response.body) throw new Error('流式读取器未就绪 (ReadableStream not supported)');
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -179,6 +202,12 @@ function ReadingNewContent() {
         setReadingText(text);
       }
 
+      // 简单防呆：如果拿到的文本太短，判定为无效的流输出，视为出错
+      if (text.trim().length < 30) {
+        throw new Error('AI 生成的指引信息过短或不完整，请尝试重新请求解读');
+      }
+
+      stopAmbient();
       setGenerating(false);
 
       // 解读完成后，自动保存至本地 localStorage 日记
@@ -186,8 +215,10 @@ function ReadingNewContent() {
       const journalId = saveLocalReading(question, mood, spreadType, serverCards, finalReading);
       setSavedJournalId(journalId);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Stream read error:', error);
+      stopAmbient();
+      setReadingError(error.message || '大模型请求失败，请检查网络或配置');
       setGenerating(false);
     }
   };
@@ -268,7 +299,28 @@ function ReadingNewContent() {
         
         {/* 1. 状态：抽牌交互中 */}
         {step === 'draw' && (
-          <div className="w-full flex-1 flex flex-col justify-center">
+          <div className="w-full flex-grow flex flex-col justify-center gap-4 my-2">
+            {/* 顶部的今日月相小指引 */}
+            <div className="w-full p-4 rounded-xl border border-gold/10 bg-[#0F1117]/35 flex items-center gap-3.5 select-none">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-b from-[#11131E] to-[#08090E] border border-gold/10 flex items-center justify-center relative overflow-hidden flex-shrink-0">
+                <svg viewBox="0 0 100 100" className="w-6.5 h-6.5 text-gold/85 drop-shadow-[0_0_6px_rgba(201,167,106,0.4)]">
+                  <circle cx="50" cy="50" r="38" className="fill-[#1A1F30]/40 stroke-none" />
+                  <path
+                    d={getMoonSvgPath(moonPhase.iconType, moonPhase.percent)}
+                    className="fill-gold stroke-none"
+                  />
+                </svg>
+              </div>
+              <div className="flex-1 flex flex-col gap-0.5">
+                <span className="text-[9px] text-gold-muted/65 font-mono tracking-widest uppercase">
+                  LUNAR ENERGY ✦ {moonPhase.name}
+                </span>
+                <p className="text-[9px] text-foreground/80 font-serif leading-relaxed tracking-wide">
+                  {moonPhase.advice}
+                </p>
+              </div>
+            </div>
+
             {spread && (
               <CardDeck
                 neededCount={spread.positions.length}
@@ -352,6 +404,24 @@ function ReadingNewContent() {
               generating={generating}
             />
 
+            {/* AI 解读报错与重试 */}
+            {!generating && readingError && (
+              <div className="w-full max-w-sm px-5 py-4 rounded-xl border border-red-950/45 bg-[#170B0B]/50 flex flex-col gap-3.5 mb-6 text-center shadow-lg" style={{ boxShadow: '0 0 15px rgba(239, 68, 68, 0.1)' }}>
+                <span className="text-[11px] text-red-400 font-serif font-bold tracking-widest">
+                  ✦ MIRROR 情绪解读遇到异常 ✦
+                </span>
+                <p className="text-[10px] text-red-300/80 font-mono break-all leading-relaxed px-2">
+                  {readingError}
+                </p>
+                <button
+                  onClick={handleStartReading}
+                  className="mx-auto px-5 py-2.5 rounded-lg border border-red-800/40 bg-red-950/40 text-[10px] text-red-300 font-serif tracking-widest hover:bg-red-900/40 transition-all duration-300 cursor-pointer"
+                >
+                  ✦ 重新发起 MIRROR 解读 ✦
+                </button>
+              </div>
+            )}
+
             {/* 自动静默保存提示 */}
             {!generating && savedJournalId && (
               <div className="w-full flex flex-col items-center gap-3.5 mb-6">
@@ -363,17 +433,25 @@ function ReadingNewContent() {
                   ✦ 已同步并保存到您的情绪日记 ✦
                 </motion.div>
                 
-                <button
-                  onClick={() => setShowShare(true)}
-                  className="px-4 py-2 rounded-lg border border-gold/25 bg-gold/5 text-[10px] text-gold font-serif tracking-widest hover:bg-gold/10 transition-all cursor-pointer shadow-gold-glow"
-                >
-                  ✦ 生成分享金句海报 ✦
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowShare(true)}
+                    className="px-4 py-2 rounded-lg border border-gold/25 bg-gold/5 text-[10px] text-gold font-serif tracking-widest hover:bg-gold/10 transition-all cursor-pointer shadow-gold-glow"
+                  >
+                    ✦ 生成分享金句海报 ✦
+                  </button>
+                  <button
+                    onClick={() => setShowZen(true)}
+                    className="px-4 py-2 rounded-lg border border-gold/25 bg-gold/5 text-[10px] text-gold font-serif tracking-widest hover:bg-gold/10 transition-all cursor-pointer shadow-gold-glow"
+                  >
+                    ✦ 进入镜面冥想 ✦
+                  </button>
+                </div>
               </div>
             )}
 
             {/* 追问聊天对话区 */}
-            {!generating && (
+            {!generating && savedJournalId && (
               <div className="w-full border-t border-gold/10 pt-6 mt-2 flex flex-col gap-4">
                 
                 {/* 标题 */}

@@ -78,6 +78,27 @@ export function deleteLocalReading(id: string): boolean {
   }
 }
 
+export function updateLocalReading(id: string, reading: ParsedReading): boolean {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const readings = getLocalReadings();
+    const index = readings.findIndex((r) => r.id === id);
+    if (index === -1) return false;
+
+    readings[index] = {
+      ...readings[index],
+      reading,
+    };
+
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(readings));
+    return true;
+  } catch (e) {
+    console.error('Failed to update reading in localStorage:', e);
+    return false;
+  }
+}
+
 // ==========================================
 // 情绪每日签到打卡 (Daily Check-in) 逻辑部分
 // ==========================================
@@ -133,5 +154,113 @@ export function saveLocalCheckIn(mood: string, dateInput?: string): boolean {
     console.error('Failed to save checkin to localStorage:', e);
     return false;
   }
+}
+
+const MONTHLY_REPORT_KEY = 'mirror_tarot_monthly_report';
+
+export function saveLocalMonthlyReport(reportText: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(MONTHLY_REPORT_KEY, reportText);
+  } catch (e) {
+    console.error('Failed to save monthly report to localStorage:', e);
+  }
+}
+
+export function getLocalMonthlyReport(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return localStorage.getItem(MONTHLY_REPORT_KEY) || '';
+  } catch (e) {
+    console.error('Failed to read monthly report from localStorage:', e);
+    return '';
+  }
+}
+
+export interface JournalAnalytics {
+  topCards: {
+    id: string;
+    name: string;
+    zhName: string;
+    image: string;
+    count: number;
+  }[];
+  moodTrend: {
+    date: string;
+    score: number;
+    mood: string;
+  }[];
+}
+
+export function getJournalAnalytics(): JournalAnalytics {
+  const readings = getLocalReadings();
+  const checkins = getLocalCheckIns();
+
+  // 1. 统计高频卡牌 Top 3
+  const cardCountMap: Record<string, { card: SelectedCard; count: number }> = {};
+  
+  // 仅分析最近 30 天的日记卡牌
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  readings.forEach((entry) => {
+    const entryDate = new Date(entry.createdAt);
+    if (entryDate >= thirtyDaysAgo) {
+      entry.cards.forEach((card) => {
+        if (!cardCountMap[card.id]) {
+          cardCountMap[card.id] = { card, count: 0 };
+        }
+        cardCountMap[card.id].count += 1;
+      });
+    }
+  });
+
+  const topCards = Object.values(cardCountMap)
+    .map((item) => ({
+      id: item.card.id,
+      name: item.card.name,
+      zhName: item.card.zhName,
+      image: item.card.image,
+      count: item.count,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
+
+  // 2. 统计最近 15 次有记录（签到或日记）的情绪趋势
+  const moodScores: Record<string, number> = {
+    '平静': 4,
+    '期待': 4,
+    '纠结': 3,
+    '迷茫': 3,
+    '焦虑': 2,
+    '难过': 1,
+  };
+
+  const dateMap: Record<string, { score: number; mood: string }> = {};
+
+  checkins.forEach((c) => {
+    const score = moodScores[c.mood] || 3;
+    dateMap[c.date] = { score, mood: c.mood };
+  });
+
+  readings.forEach((r) => {
+    const dateStr = getLocalDateString(new Date(r.createdAt));
+    const score = moodScores[r.mood] || 3;
+    dateMap[dateStr] = { score, mood: r.mood };
+  });
+
+  const moodTrend = Object.entries(dateMap)
+    .map(([date, item]) => ({
+      date,
+      score: item.score,
+      mood: item.mood,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-15);
+
+  return {
+    topCards,
+    moodTrend,
+  };
 }
 

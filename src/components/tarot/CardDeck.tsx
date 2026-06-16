@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import CardBack from './CardBack';
+import { useAudio } from '@/hooks/useAudio';
 
 interface CardDeckProps {
   neededCount: number;
@@ -11,12 +12,14 @@ interface CardDeckProps {
 }
 
 export default function CardDeck({ neededCount, positions, onComplete }: CardDeckProps) {
+  const { playShuffle } = useAudio();
   const [drawnCount, setDrawnCount] = useState(0);
   const [shuffling, setShuffling] = useState(true);
   const [drawnCards, setDrawnCards] = useState<number[]>([]); // 记录被抽中的临时索引
 
   // 模拟自动洗牌 1.5 秒
   useEffect(() => {
+    playShuffle();
     const timer = setTimeout(() => {
       setShuffling(false);
     }, 1500);

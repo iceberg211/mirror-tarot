@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { SelectedCard } from '@/lib/tarot/types';
 import CardBack from './CardBack';
+import { useAudio } from '@/hooks/useAudio';
 
 interface TarotCardProps {
   card?: SelectedCard;
@@ -22,7 +23,14 @@ export default function TarotCard({
   interactive = true,
   className = '',
 }: TarotCardProps) {
+  const { playReveal } = useAudio();
   const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    if (revealed) {
+      playReveal();
+    }
+  }, [revealed]);
 
   // 尺寸映射
   const sizeClasses = {

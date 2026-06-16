@@ -7,9 +7,11 @@ import { motion } from 'framer-motion';
 import TarotCard from '@/components/tarot/TarotCard';
 import ReadingResult from '@/components/tarot/ReadingResult';
 import BottomNav from '@/components/layout/BottomNav';
-import { getLocalReadingById, deleteLocalReading, JournalEntry } from '@/lib/db/localJournal';
+import { getLocalReadingById, deleteLocalReading, updateLocalReading, JournalEntry } from '@/lib/db/localJournal';
 import { getSpreadByType } from '@/lib/tarot/spreads';
 import SharePoster from '@/components/tarot/SharePoster';
+import { useAudio } from '@/hooks/useAudio';
+import BreathingZen from '@/components/tarot/BreathingZen';
 
 const defaultSuggestions = [
   '结合我的感情问题解释',
@@ -19,6 +21,63 @@ const defaultSuggestions = [
   '这组牌的反面提醒是什么？',
 ];
 
+function parseStreamingReading(text: string, cardCount: number) {
+  const sections = {
+    questionSummary: '',
+    intuitiveSummary: '',
+    contradiction: '',
+    overlookedFactor: '',
+    actionAdvice: '',
+    gentleReminder: '',
+  };
+  const cardReadings = Array(cardCount).fill('');
+
+  const parts = text.split('# ');
+  parts.forEach((part) => {
+    const lines = part.split('\n');
+    const title = lines[0].trim();
+    const body = lines.slice(1).join('\n').trim();
+
+    if (title.startsWith('SUMMARY')) {
+      sections.intuitiveSummary = body;
+      sections.questionSummary = body.slice(0, 15) + '...';
+    } else if (title.startsWith('CARD_READING_')) {
+      const idx = parseInt(title.replace('CARD_READING_', ''), 10) - 1;
+      if (idx >= 0 && idx < cardCount) {
+        cardReadings[idx] = body;
+      }
+    } else if (title.startsWith('CONTRADICTION')) {
+      sections.contradiction = body;
+    } else if (title.startsWith('OVERLOOKED_FACTOR')) {
+      sections.overlookedFactor = body;
+    } else if (title.startsWith('ACTION_ADVICE')) {
+      sections.actionAdvice = body;
+    } else if (title.startsWith('GENTLE_REMINDER')) {
+      sections.gentleReminder = body;
+    }
+  });
+
+  return {
+    ...sections,
+    cardReadings: cardReadings.map((body, i) => ({
+      positionName: '',
+      cardName: '',
+      cardZhName: '',
+      orientation: 'upright' as const,
+      interpretation: body,
+    })),
+    followUpSuggestions: defaultSuggestions,
+  };
+}
+
+function isReadingEmpty(reading: any): boolean {
+  if (!reading) return true;
+  const cardInterpretationsEmpty = reading.cardReadings?.every(
+    (c: any) => !c.interpretation || c.interpretation.trim() === '等待解读开始...' || !c.interpretation.trim()
+  );
+  return !reading.intuitiveSummary && cardInterpretationsEmpty;
+}
+
 export default function ReadingDetailPage() {
   const router = useRouter();
   const params = useParams();
@@ -26,6 +85,13 @@ export default function ReadingDetailPage() {
 
   const [entry, setEntry] = useState<JournalEntry | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // 重新生成相关状态
+  const [generating, setGenerating] = useState(false);
+  const [readingText, setReadingText] = useState('');
+  const [readingError, setReadingError] = useState<string | null>(null);
+  const [showZen, setShowZen] = useState(false);
+  const { playAmbient, stopAmbient } = useAudio();
 
   // 追问对话状态
   const [chatInput, setChatInput] = useState('');
@@ -53,6 +119,77 @@ export default function ReadingDetailPage() {
     if (confirm('确定要删除这篇情绪日记吗？删除后将不可找回。')) {
       deleteLocalReading(id);
       router.push('/journal');
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (generating || !entry) return;
+    setGenerating(true);
+    setReadingText('');
+    setReadingError(null);
+    playAmbient();
+
+    try {
+      const response = await fetch('/api/reading', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: entry.question,
+          mood: entry.mood,
+          spreadType: entry.spreadType,
+          cards: entry.cards,
+        }),
+      });
+
+      if (!response.ok) {
+        let errMsg = `HTTP 错误！状态码: ${response.status}`;
+        try {
+          const errData = await response.json();
+          errMsg = errData.error || errMsg;
+        } catch (_) {
+          try {
+            const txt = await response.text();
+            if (txt) errMsg = txt;
+          } catch (_) {}
+        }
+        throw new Error(errMsg);
+      }
+
+      if (!response.body) throw new Error('流式读取器未就绪 (ReadableStream not supported)');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      let text = '';
+
+      while (!done) {
+        const { value, done: isDone } = await reader.read();
+        done = isDone;
+        const chunk = decoder.decode(value, { stream: !done });
+        text += chunk;
+        setReadingText(text);
+      }
+
+      if (text.trim().length < 30) {
+        throw new Error('AI 生成的指引信息过短或不完整，请重试');
+      }
+
+      const finalReading = parseStreamingReading(text, entry.cards.length);
+      const ok = updateLocalReading(entry.id, finalReading);
+      stopAmbient();
+      
+      if (ok) {
+        setEntry((prev) => (prev ? { ...prev, reading: finalReading } : null));
+      } else {
+        throw new Error('本地日记更新失败');
+      }
+
+      setGenerating(false);
+    } catch (err: any) {
+      console.error('Regenerate error:', err);
+      stopAmbient();
+      setReadingError(err.message || '重建情绪解读失败');
+      setGenerating(false);
     }
   };
 
@@ -198,23 +335,68 @@ export default function ReadingDetailPage() {
 
         {/* AI 解读结果 */}
         <ReadingResult
-          parsedReading={entry.reading}
+          parsedReading={generating ? parseStreamingReading(readingText, entry.cards.length) : entry.reading}
           cards={entry.cards}
-          generating={false}
+          generating={generating}
         />
 
-        {/* 生成海报按钮 */}
-        <div className="w-full flex justify-center mb-6">
-          <button
-            onClick={() => setShowShare(true)}
-            className="px-4 py-2 rounded-lg border border-gold/25 bg-gold/5 text-[10px] text-gold font-serif tracking-widest hover:bg-gold/10 transition-all cursor-pointer shadow-gold-glow"
-          >
-            ✦ 生成分享金句海报 ✦
-          </button>
-        </div>
+        {/* AI 重新解读报错与重试 */}
+        {!generating && readingError && (
+          <div className="w-full max-w-sm px-5 py-4 rounded-xl border border-red-950/45 bg-[#170B0B]/50 flex flex-col gap-3.5 mb-6 text-center shadow-lg" style={{ boxShadow: '0 0 15px rgba(239, 68, 68, 0.1)' }}>
+            <span className="text-[11px] text-red-400 font-serif font-bold tracking-widest">
+              ✦ 情绪解读重建失败 ✦
+            </span>
+            <p className="text-[10px] text-red-300/80 font-mono break-all leading-relaxed px-2">
+              {readingError}
+            </p>
+            <button
+              onClick={handleRegenerate}
+              className="mx-auto px-5 py-2.5 rounded-lg border border-red-800/40 bg-red-950/40 text-[10px] text-red-300 font-serif tracking-widest hover:bg-red-900/40 transition-all duration-300 cursor-pointer"
+            >
+              ✦ 点击重试重建 ✦
+            </button>
+          </div>
+        )}
+
+        {/* 如果是没有解读内容的损坏日记，展示重建按钮 */}
+        {!generating && !readingError && isReadingEmpty(entry.reading) && (
+          <div className="w-full max-w-sm px-5 py-4 rounded-xl border border-gold/15 bg-[#11131A]/60 flex flex-col gap-3.5 mb-6 text-center shadow-gold-glow">
+            <span className="text-[11px] text-gold font-serif font-semibold tracking-widest">
+              ✦ 解读信息缺失 ✦
+            </span>
+            <p className="text-[10px] text-gold-muted/70 font-serif leading-relaxed px-2">
+              检测到此篇情绪日记缺少 AI 情绪解读，可能因为之前大模型接口配置有误或中断。
+            </p>
+            <button
+              onClick={handleRegenerate}
+              className="mx-auto px-5 py-2.5 rounded-lg border border-gold/25 bg-gold/5 text-[10px] text-gold font-serif tracking-widest hover:bg-gold/10 transition-all duration-300 cursor-pointer shadow-gold-glow"
+            >
+              ✦ 重新唤醒 MIRROR 情绪解读 ✦
+            </button>
+          </div>
+        )}
+
+        {/* 生成海报与冥想按钮 */}
+        {!generating && !isReadingEmpty(entry.reading) && (
+          <div className="w-full flex justify-center gap-3 mb-6">
+            <button
+              onClick={() => setShowShare(true)}
+              className="px-4 py-2 rounded-lg border border-gold/25 bg-gold/5 text-[10px] text-gold font-serif tracking-widest hover:bg-gold/10 transition-all cursor-pointer shadow-gold-glow"
+            >
+              ✦ 生成分享金句海报 ✦
+            </button>
+            <button
+              onClick={() => setShowZen(true)}
+              className="px-4 py-2 rounded-lg border border-gold/25 bg-gold/5 text-[10px] text-gold font-serif tracking-widest hover:bg-gold/10 transition-all cursor-pointer shadow-gold-glow"
+            >
+              ✦ 进入镜面冥想 ✦
+            </button>
+          </div>
+        )}
 
         {/* 追问聊天对话区 */}
-        <div className="w-full border-t border-gold/10 pt-6 mt-2 flex flex-col gap-4">
+        {!generating && !isReadingEmpty(entry.reading) && (
+          <div className="w-full border-t border-gold/10 pt-6 mt-2 flex flex-col gap-4">
           <div className="flex items-center gap-2 text-gold px-1">
             <MessageSquare className="w-4 h-4" />
             <span className="text-xs font-serif tracking-widest font-semibold">继续追问</span>
@@ -287,6 +469,7 @@ export default function ReadingDetailPage() {
             </button>
           </div>
         </div>
+        )}
 
       </div>
 
@@ -298,6 +481,10 @@ export default function ReadingDetailPage() {
           intuitiveSummary={entry.reading.intuitiveSummary}
           onClose={() => setShowShare(false)}
         />
+      )}
+
+      {showZen && (
+        <BreathingZen onClose={() => setShowZen(false)} />
       )}
 
       <BottomNav />

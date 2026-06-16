@@ -7,6 +7,7 @@ import { Compass, HelpCircle, Eye, Sparkles, AlertCircle, Moon } from 'lucide-re
 import BottomNav from '@/components/layout/BottomNav';
 import { spreads } from '@/lib/tarot/spreads';
 import { SpreadType } from '@/lib/tarot/types';
+import { getTodayMoonPhase, getMoonSvgPath } from '@/lib/tarot/moonPhase';
 
 // 情绪配置列表
 const moods = [
@@ -24,6 +25,8 @@ export default function HomePage() {
   const [selectedMood, setSelectedMood] = useState('confused');
   const [selectedSpread, setSelectedSpread] = useState<SpreadType>('three_cards');
   const [error, setError] = useState('');
+
+  const moonPhase = getTodayMoonPhase();
 
   const handleStart = (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,6 +67,39 @@ export default function HomePage() {
         <p className="text-xs text-gold/60 font-serif tracking-widest mt-2">
           问牌，也是问自己。
         </p>
+      </div>
+
+      {/* 今日月影星象指引 */}
+      <div className="w-full max-w-md px-6 mt-2 mb-2">
+        <div className="w-full p-4 rounded-2xl border border-gold/15 bg-[#0F1117]/60 flex items-center gap-4 shadow-gold-glow">
+          <div className="w-12 h-12 rounded-full bg-gradient-to-b from-[#11131E] to-[#08090E] border border-gold/10 flex items-center justify-center relative overflow-hidden flex-shrink-0">
+            <div className="absolute inset-1 rounded-full bg-gold/5 blur-[2px]" />
+            <svg viewBox="0 0 100 100" className="w-8 h-8 text-gold/80 drop-shadow-[0_0_8px_rgba(201,167,106,0.5)]">
+              <circle cx="50" cy="50" r="38" className="fill-[#1A1F30]/40 stroke-none" />
+              <path
+                d={getMoonSvgPath(moonPhase.iconType, moonPhase.percent)}
+                className="fill-gold stroke-none"
+              />
+            </svg>
+          </div>
+
+          <div className="flex-grow flex flex-col gap-0.5">
+            <div className="flex justify-between items-center">
+              <span className="text-[9px] text-gold-muted/70 font-mono tracking-widest uppercase">
+                LUNAR SIGN ✦ {moonPhase.illustration}
+              </span>
+              <span className="text-[8px] text-gold font-mono border border-gold/15 px-1.5 py-0.5 rounded-full">
+                {moonPhase.percent}% 明度
+              </span>
+            </div>
+            <h3 className="text-xs font-serif text-gold font-semibold tracking-widest">
+              {moonPhase.name}
+            </h3>
+            <p className="text-[9px] text-foreground/85 font-serif leading-relaxed tracking-wide mt-1">
+              {moonPhase.advice}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* 2. 主表单域 */}
