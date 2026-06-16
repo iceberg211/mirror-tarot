@@ -1,21 +1,9 @@
-import { getQwenModel } from '@/lib/ai/qwen';
+import { createQwenChatStream } from '@/lib/ai/qwen';
 
 export async function POST(req: Request) {
   try {
     const { checkins, readings, topCards } = await req.json();
 
-    const apiKey = process.env.DASHSCOPE_API_KEY || '';
-    const baseURL = process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-    const modelName = process.env.QWEN_MODEL || 'qwen-plus';
-
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: 'DASHSCOPE_API_KEY is not configured' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // 组装大模型潜意识月度报告 Prompt
     const checkinText = checkins && checkins.length > 0
       ? checkins.map((c: any) => `* ${c.date}: ${c.mood}`).join('\n')
       : '无打卡历史';
@@ -60,88 +48,8 @@ ${topCardsText}
 
 请直接输出内容，语气要像对待一位在深夜里探寻方向的旅人，真诚、温润、深刻。`;
 
-    // 1. 发起原生的 HTTP 请求，强制开启 stream: true
-    const response = await fetch(`${baseURL.replace(/\/$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: modelName,
-        messages: [{ role: 'user', content: promptText }],
-        temperature: 0.8,
-        stream: true,
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('Monthly report API Error:', errText);
-      return new Response(JSON.stringify({ error: `LLM Endpoint error: ${errText}` }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    if (!response.body) {
-      return new Response(JSON.stringify({ error: 'Empty response body from LLM' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // 2. 流式传输 ReadableStream 自定义提取
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-    const reader = response.body.getReader();
-
-    const textStream = new ReadableStream({
-      async start(controller) {
-        let buffer = '';
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-              controller.close();
-              break;
-            }
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || ''; // 保留不完整的一行
-
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || trimmed === 'data: [DONE]') continue;
-              if (trimmed.startsWith('data: ')) {
-                try {
-                  const jsonStr = trimmed.slice(6);
-                  const data = JSON.parse(jsonStr);
-                  const content = data.choices?.[0]?.delta?.content || '';
-                  if (content) {
-                    controller.enqueue(encoder.encode(content));
-                  }
-                } catch (e) {
-                  // 忽略
-                }
-              }
-            }
-          }
-        } catch (streamErr) {
-          console.error('Stream processing error:', streamErr);
-          controller.error(streamErr);
-        }
-      },
-    });
-
-    return new Response(textStream, {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    });
+    // 一键调起公用流请求与 SSE 解析助手
+    return await createQwenChatStream([{ role: 'user', content: promptText }], 0.8);
 
   } catch (error: any) {
     console.error('API /api/journal/report Error:', error);
