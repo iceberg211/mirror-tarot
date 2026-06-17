@@ -156,7 +156,7 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
               exit={{ opacity: 0, y: -5 }}
               className="text-xs text-gold font-serif tracking-widest animate-pulse font-semibold"
             >
-              ✦ 左右拨动牌堆，凭第一直觉点击抽选 {drawnCount + 1}/{neededCount} 张牌 ✦
+              ✦ 左右拨动牌堆，凭第一直觉点击抽选卡牌 (已抽选 {drawnCount}/{neededCount} 张) ✦
             </motion.p>
           )}
         </AnimatePresence>
