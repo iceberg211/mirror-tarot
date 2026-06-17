@@ -45,6 +45,16 @@ export default function HomePage() {
     router.push(`/reading/new?${params.toString()}`);
   };
 
+  const handleDailyDraw = () => {
+    setError('');
+    const params = new URLSearchParams({
+      question: '抽取今日运势与觉察指引。',
+      mood: moods.find((m) => m.id === selectedMood)?.name || '平静',
+      spreadType: 'one_card',
+    });
+    router.push(`/reading/new?${params.toString()}`);
+  };
+
   return (
     <main className="flex-1 min-h-screen pb-24 flex flex-col justify-between items-center text-foreground relative overflow-y-auto">
       {/* 装饰星体 */}
@@ -107,9 +117,18 @@ export default function HomePage() {
         
         {/* 问题输入卡片 */}
         <div className="flex flex-col gap-2">
-          <label className="text-xs text-gold-muted font-serif tracking-widest pl-1">
-            今天你想问什么？
-          </label>
+          <div className="flex justify-between items-center pl-1 pr-1">
+            <label className="text-xs text-gold-muted font-serif tracking-widest">
+              今天你想问什么？
+            </label>
+            <button
+              type="button"
+              onClick={handleDailyDraw}
+              className="text-[10px] text-gold font-serif tracking-widest hover:underline hover:text-gold/80 cursor-pointer"
+            >
+              ✦ 今日一牌指引
+            </button>
+          </div>
           <div className="relative rounded-2xl border border-gold/25 bg-card/60 p-4 shadow-gold-glow focus-within:border-gold-focus transition-all duration-300">
             <textarea
               value={question}

@@ -257,10 +257,40 @@ export function getJournalAnalytics(): JournalAnalytics {
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-15);
-
+  
   return {
     topCards,
     moodTrend,
   };
+}
+
+export function exportJournalData(): string {
+  if (typeof window === 'undefined') return '';
+  const data = {
+    version: '1.0',
+    readings: getLocalReadings(),
+    checkins: getLocalCheckIns(),
+    monthlyReport: getLocalMonthlyReport()
+  };
+  return JSON.stringify(data, null, 2);
+}
+
+export function importJournalData(jsonStr: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (parsed && Array.isArray(parsed.readings) && Array.isArray(parsed.checkins)) {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(parsed.readings));
+      localStorage.setItem(CHECKIN_STORAGE_KEY, JSON.stringify(parsed.checkins));
+      if (typeof parsed.monthlyReport === 'string') {
+        localStorage.setItem(MONTHLY_REPORT_KEY, parsed.monthlyReport);
+      }
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.error('Failed to import journal data:', e);
+    return false;
+  }
 }
 

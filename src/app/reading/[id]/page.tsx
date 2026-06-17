@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import { ArrowLeft, MessageSquare, Trash2, Calendar, Compass, Send } from 'lucide-react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { ArrowLeft, MessageSquare, Trash2, Calendar, Send } from 'lucide-react';
 import TarotCard from '@/components/tarot/TarotCard';
 import ReadingResult from '@/components/tarot/ReadingResult';
 import BottomNav from '@/components/layout/BottomNav';
@@ -12,6 +11,7 @@ import { getSpreadByType } from '@/lib/tarot/spreads';
 import SharePoster from '@/components/tarot/SharePoster';
 import { useAudio } from '@/hooks/useAudio';
 import BreathingZen from '@/components/tarot/BreathingZen';
+import { SelectedCard, ParsedReading } from '@/lib/tarot/types';
 
 const defaultSuggestions = [
   '结合我的感情问题解释',
@@ -21,7 +21,7 @@ const defaultSuggestions = [
   '这组牌的反面提醒是什么？',
 ];
 
-function parseStreamingReading(text: string, cardCount: number) {
+function parseStreamingReading(text: string, cardCount: number): ParsedReading {
   const sections = {
     questionSummary: '',
     intuitiveSummary: '',
@@ -59,7 +59,7 @@ function parseStreamingReading(text: string, cardCount: number) {
 
   return {
     ...sections,
-    cardReadings: cardReadings.map((body, i) => ({
+    cardReadings: cardReadings.map((body) => ({
       positionName: '',
       cardName: '',
       cardZhName: '',
@@ -70,32 +70,35 @@ function parseStreamingReading(text: string, cardCount: number) {
   };
 }
 
-function getCardElement(card: any): 'water' | 'fire' | 'wind' | 'earth' {
+function getCardElement(card: SelectedCard): 'water' | 'fire' | 'wind' | 'earth' {
   if (card.arcana === 'minor' && card.suit) {
     if (card.suit === 'wands') return 'fire';
     if (card.suit === 'cups') return 'water';
     if (card.suit === 'swords') return 'wind';
     if (card.suit === 'pentacles') return 'earth';
   }
-  const num = card.number;
+  const num = card.number ?? 0;
   if ([2, 3, 12, 13, 18, 20].includes(num)) return 'water';
   if ([1, 7, 10, 16, 19].includes(num)) return 'fire';
   if ([0, 6, 11, 14, 17].includes(num)) return 'wind';
   return 'earth';
 }
 
-function isReadingEmpty(reading: any): boolean {
+function isReadingEmpty(reading: ParsedReading): boolean {
   if (!reading) return true;
   const cardInterpretationsEmpty = reading.cardReadings?.every(
-    (c: any) => !c.interpretation || c.interpretation.trim() === '等待解读开始...' || !c.interpretation.trim()
+    (c) => !c.interpretation || c.interpretation.trim() === '等待解读开始...' || !c.interpretation.trim()
   );
   return !reading.intuitiveSummary && cardInterpretationsEmpty;
 }
 
-export default function ReadingDetailPage() {
+function ReadingDetailContent() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
+  
   const id = params.id as string;
+  const trigger = searchParams.get('trigger') === 'true';
 
   const [entry, setEntry] = useState<JournalEntry | null>(null);
   const [loading, setLoading] = useState(true);
@@ -118,29 +121,36 @@ export default function ReadingDetailPage() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 加载本地历史记录，并在完成加载后自动初始化播放对应卡牌的元素能量音效
+  // 1. 加载数据并激活元素音效
   useEffect(() => {
     if (id) {
       const data = getLocalReadingById(id);
       if (data) {
-        setEntry(data);
-        if (data.cards && data.cards.length > 0) {
-          const mainElement = getCardElement(data.cards[0]);
-          setActiveElement(mainElement);
-          playElementAmbient(mainElement);
-        }
+        // 延时加载以解决 React setState synchronous effect 规则警告
+        setTimeout(() => {
+          setEntry(data);
+          if (data.cards && data.cards.length > 0) {
+            const mainElement = getCardElement(data.cards[0]);
+            setActiveElement(mainElement);
+            playElementAmbient(mainElement);
+          }
+        }, 0);
       }
-      setLoading(false);
+      setTimeout(() => {
+        setLoading(false);
+      }, 0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // 组件卸载时切断环境音
+  // 2. 环境音生命周期清理
   useEffect(() => {
     return () => {
       stopElementAmbient();
     };
-  }, []);
+  }, [stopElementAmbient]);
 
+  // 自动滚动聊天到底部
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, chatLoading]);
@@ -176,11 +186,11 @@ export default function ReadingDetailPage() {
         try {
           const errData = await response.json();
           errMsg = errData.error || errMsg;
-        } catch (_) {
+        } catch {
           try {
             const txt = await response.text();
             if (txt) errMsg = txt;
-          } catch (_) {}
+          } catch {}
         }
         throw new Error(errMsg);
       }
@@ -215,13 +225,28 @@ export default function ReadingDetailPage() {
       }
 
       setGenerating(false);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Regenerate error:', err);
       stopAmbient();
-      setReadingError(err.message || '重建情绪解读失败');
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setReadingError(errMsg || '重建情绪解读失败');
       setGenerating(false);
     }
   };
+
+  // 3. 页面加载完毕后自动触发流式 AI 解读 (如果要求 trigger 或当前数据空白)
+  useEffect(() => {
+    if (!loading && entry) {
+      const isEmpty = isReadingEmpty(entry.reading);
+      if ((trigger || isEmpty) && !generating && !readingText && !readingError) {
+        // 延时触发以解决 React setState synchronous effect 规则警告
+        setTimeout(() => {
+          handleRegenerate();
+        }, 0);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, entry, trigger]);
 
   const handleSendFollowUp = async (inputText: string) => {
     if (!inputText.trim() || chatLoading || !entry) return;
@@ -239,6 +264,9 @@ export default function ReadingDetailPage() {
         entry.reading.cardReadings.map((c, idx) => `# CARD_READING_${idx + 1}\n${c.interpretation}`).join('\n\n') +
         `\n\n# CONTRADICTION\n${entry.reading.contradiction}\n\n# OVERLOOKED_FACTOR\n${entry.reading.overlookedFactor}\n\n# ACTION_ADVICE\n${entry.reading.actionAdvice}\n\n# GENTLE_REMINDER\n${entry.reading.gentleReminder}`;
 
+      // 先插入一条空的 assistant 消息
+      setChatMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
+
       const response = await fetch('/api/reading/follow-up', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -253,29 +281,37 @@ export default function ReadingDetailPage() {
         }),
       });
 
-      if (!response.body) throw new Error('No body in response');
+      if (!response.body) throw new Error('流式读取器未就绪 (ReadableStream not supported)');
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
-      let replyText = '';
-
-      setChatMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
 
       while (!done) {
         const { value, done: isDone } = await reader.read();
         done = isDone;
         const chunk = decoder.decode(value, { stream: !done });
-        replyText += chunk;
 
         setChatMessages((prev) => {
           const updated = [...prev];
-          updated[updated.length - 1] = { role: 'assistant', content: replyText };
+          const lastMsg = updated[updated.length - 1];
+          updated[updated.length - 1] = {
+            ...lastMsg,
+            content: lastMsg.content + chunk
+          };
           return updated;
         });
       }
     } catch (err) {
       console.error('Follow-up error:', err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setChatMessages((prev) => [
+        ...prev.slice(0, -1),
+        {
+          role: 'assistant',
+          content: `⚠️ 对话遇到异常: ${errMsg || '网络连接失败，请稍后重试。'}`
+        }
+      ]);
     } finally {
       setChatLoading(false);
     }
@@ -320,6 +356,20 @@ export default function ReadingDetailPage() {
     earth: 'bg-[#040805]',
   };
 
+  const parsedReading = generating 
+    ? parseStreamingReading(readingText, entry.cards.length) 
+    : entry.reading;
+
+  // 计算当前大模型流式解读正聚焦在第几张卡牌的索引上
+  const activeFocusIndex = (() => {
+    if (!generating) return -1;
+    const readings = parsedReading.cardReadings;
+    if (readings[2]?.interpretation && readings[2].interpretation.trim() !== '' && readings[2].interpretation.trim() !== '等待解读开始...') return 2;
+    if (readings[1]?.interpretation && readings[1].interpretation.trim() !== '' && readings[1].interpretation.trim() !== '等待解读开始...') return 1;
+    if (readings[0]?.interpretation && readings[0].interpretation.trim() !== '' && readings[0].interpretation.trim() !== '等待解读开始...') return 0;
+    return -1;
+  })();
+
   return (
     <main className={`flex-grow min-h-screen pb-28 flex flex-col items-center text-foreground relative overflow-y-auto transition-colors duration-1000 ${
       activeElement ? elementMainBgs[activeElement] : 'bg-[#07090F]'
@@ -332,6 +382,7 @@ export default function ReadingDetailPage() {
         activeElement === 'earth' ? 'bg-radial-gradient from-emerald-950/15 via-transparent to-transparent shadow-[inset_0_0_80px_rgba(16,185,129,0.06)]' :
         'bg-radial-gradient from-gold/5 via-transparent to-transparent'
       }`} />
+      
       {/* 顶部 Header */}
       <div className="w-full max-w-md px-6 pt-6 flex justify-between items-center z-10">
         <button
@@ -351,7 +402,7 @@ export default function ReadingDetailPage() {
         </button>
       </div>
 
-      <div className="w-full max-w-md px-6 flex-1 flex flex-col justify-start items-center my-4">
+      <div className="w-full max-w-md px-6 flex-1 flex flex-col justify-start items-center my-4 z-10">
         
         {/* 问题、情绪和时间摘要 */}
         <div className="w-full p-4 rounded-xl border border-gold/15 bg-[#0F1117]/60 flex flex-col gap-2.5 mb-6">
@@ -369,23 +420,39 @@ export default function ReadingDetailPage() {
           </p>
         </div>
 
-        {/* 卡牌平铺展示 */}
+        {/* 卡牌平铺展示，高亮当前正在解读的卡片 */}
         <div className="flex justify-center gap-3 my-6">
-          {entry.cards.map((card) => (
-            <div key={card.id} className="flex flex-col items-center scale-90">
-              <TarotCard card={card} revealed={true} size="sm" interactive={false} />
-              <span className="text-[9px] text-gold-muted/50 mt-1.5 font-serif">
-                {card.positionName}
-              </span>
-            </div>
-          ))}
+          {entry.cards.map((card, idx) => {
+            const isFocused = activeFocusIndex === idx;
+            const isSomeFocused = activeFocusIndex !== -1;
+            return (
+              <div 
+                key={card.id} 
+                className={`flex flex-col items-center transition-all duration-700 ${
+                  isFocused 
+                    ? 'scale-100 filter drop-shadow-[0_0_15px_rgba(201,167,106,0.6)]' 
+                    : isSomeFocused 
+                      ? 'scale-80 opacity-30 blur-[0.5px]' 
+                      : 'scale-90 opacity-90'
+                }`}
+              >
+                <TarotCard card={card} revealed={true} size="sm" interactive={false} />
+                <span className={`text-[9px] mt-1.5 font-serif tracking-widest transition-colors duration-500 ${
+                  isFocused ? 'text-gold font-semibold' : 'text-gold-muted/50'
+                }`}>
+                  {card.positionName}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
         {/* AI 解读结果 */}
         <ReadingResult
-          parsedReading={generating ? parseStreamingReading(readingText, entry.cards.length) : entry.reading}
+          parsedReading={parsedReading}
           cards={entry.cards}
           generating={generating}
+          activeFocusIndex={activeFocusIndex}
         />
 
         {/* AI 重新解读报错与重试 */}
@@ -445,78 +512,79 @@ export default function ReadingDetailPage() {
         {/* 追问聊天对话区 */}
         {!generating && !isReadingEmpty(entry.reading) && (
           <div className="w-full border-t border-gold/10 pt-6 mt-2 flex flex-col gap-4">
-          <div className="flex items-center gap-2 text-gold px-1">
-            <MessageSquare className="w-4 h-4" />
-            <span className="text-xs font-serif tracking-widest font-semibold">继续追问</span>
-          </div>
+            <div className="flex items-center gap-2 text-gold px-1">
+              <MessageSquare className="w-4 h-4" />
+              <span className="text-xs font-serif tracking-widest font-semibold">继续追问</span>
+            </div>
 
-          {/* 对话列表 */}
-          {chatMessages.length > 0 && (
-            <div className="flex flex-col gap-3.5 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
-              {chatMessages.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`flex flex-col gap-1 max-w-[85%] ${
-                    msg.role === 'user' ? 'self-end items-end' : 'self-start items-start'
-                  }`}
-                >
+            {/* 对话列表 */}
+            {chatMessages.length > 0 && (
+              <div className="flex flex-col gap-3.5 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
+                {chatMessages.map((msg, idx) => (
                   <div
-                    className={`p-3 rounded-2xl text-xs font-serif leading-relaxed tracking-wide ${
-                      msg.role === 'user'
-                        ? 'bg-[#1E1C16] border border-gold/20 text-gold rounded-tr-none'
-                        : 'bg-card border border-gold/5 text-foreground/90 rounded-tl-none'
+                    key={idx}
+                    className={`flex flex-col gap-1 max-w-[85%] ${
+                      msg.role === 'user' ? 'self-end items-end' : 'self-start items-start'
                     }`}
                   >
-                    {msg.content}
+                    <div
+                      className={`p-3 rounded-2xl text-xs font-serif leading-relaxed tracking-wide ${
+                        msg.role === 'user'
+                          ? 'bg-[#1E1C16] border border-gold/20 text-gold rounded-tr-none'
+                          : 'bg-card border border-gold/5 text-foreground/90 rounded-tl-none'
+                      }`}
+                    >
+                      {msg.content}
+                    </div>
                   </div>
-                </div>
+                ))}
+                {chatLoading && (
+                  <div className="self-start max-w-[85%] flex flex-col items-start">
+                    <div className="p-3 rounded-2xl bg-card border border-gold/5 text-xs font-serif text-gold-muted/40 animate-pulse rounded-tl-none">
+                      正在梳理牌面指引...
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+            )}
+
+            {/* 快捷追问建议 (Chips) */}
+            <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+              {defaultSuggestions.map((sug, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  disabled={chatLoading}
+                  onClick={() => handleSendFollowUp(sug)}
+                  className="px-3 py-1.5 rounded-full border border-gold/10 bg-[#0E1017]/45 text-[10px] text-gold-muted/80 font-serif tracking-wider whitespace-nowrap hover:border-gold/30 hover:text-gold cursor-pointer transition-all disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  {sug}
+                </button>
               ))}
-              {chatLoading && (
-                <div className="self-start max-w-[85%] flex flex-col items-start">
-                  <div className="p-3 rounded-2xl bg-card border border-gold/5 text-xs font-serif text-gold-muted/40 animate-pulse rounded-tl-none">
-                    正在梳理牌面指引...
-                  </div>
-                </div>
-              )}
-              <div ref={chatEndRef} />
             </div>
-          )}
 
-          {/* 快捷追问建议 (Chips) */}
-          <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
-            {defaultSuggestions.map((sug, idx) => (
-              <button
-                key={idx}
-                type="button"
+            {/* 自由输入框 */}
+            <div className="relative rounded-xl border border-gold/15 bg-card/65 p-1 flex items-center shadow-gold-glow">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendFollowUp(chatInput)}
+                placeholder="结合牌阵，你还有什么想问的？"
                 disabled={chatLoading}
-                onClick={() => handleSendFollowUp(sug)}
-                className="px-3 py-1.5 rounded-full border border-gold/10 bg-[#0E1017]/45 text-[10px] text-gold-muted/80 font-serif tracking-wider whitespace-nowrap hover:border-gold/30 hover:text-gold cursor-pointer transition-all disabled:opacity-50 disabled:pointer-events-none"
+                className="flex-1 bg-transparent border-none outline-none text-xs text-foreground/90 font-serif tracking-wide placeholder:text-gold-muted/30 pl-3.5 pr-2 py-2.5 disabled:opacity-50"
+              />
+              <button
+                type="button"
+                onClick={() => handleSendFollowUp(chatInput)}
+                disabled={!chatInput.trim() || chatLoading}
+                className="w-8 h-8 rounded-lg bg-gold/10 text-gold flex items-center justify-center hover:bg-gold/20 transition-all cursor-pointer disabled:opacity-30 disabled:pointer-events-none mr-1"
               >
-                {sug}
+                <Send className="w-3.5 h-3.5" />
               </button>
-            ))}
+            </div>
           </div>
-
-          {/* 自由输入框 */}
-          <div className="relative rounded-xl border border-gold/15 bg-card/65 p-1 flex items-center shadow-gold-glow">
-            <input
-              type="text"
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSendFollowUp(chatInput)}
-              placeholder="结合牌阵，你还有什么想问的？"
-              disabled={chatLoading}
-              className="flex-1 bg-transparent border-none outline-none text-xs text-foreground/90 font-serif tracking-wide placeholder:text-gold-muted/30 pl-3.5 pr-2 py-2.5 disabled:opacity-50"
-            />
-            <button
-              onClick={() => handleSendFollowUp(chatInput)}
-              disabled={!chatInput.trim() || chatLoading}
-              className="w-8 h-8 rounded-lg bg-gold/10 text-gold flex items-center justify-center hover:bg-gold/20 transition-all cursor-pointer disabled:opacity-30 disabled:pointer-events-none mr-1"
-            >
-              <Send className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
         )}
 
       </div>
@@ -537,5 +605,17 @@ export default function ReadingDetailPage() {
 
       <BottomNav />
     </main>
+  );
+}
+
+export default function ReadingDetailPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#07090F] flex items-center justify-center text-gold/50 font-serif text-sm animate-pulse">
+        ✦ 加载中 ✦
+      </div>
+    }>
+      <ReadingDetailContent />
+    </Suspense>
   );
 }
