@@ -62,7 +62,7 @@ export default function BreathingZen({ onClose }: BreathingZenProps) {
       if (breathTimerRef.current) clearInterval(breathTimerRef.current);
       stopBowl();
     };
-  }, []);
+  }, [playBowl, stopBowl]);
 
   // 当静音状态切换时，实时同步播放与关闭
   useEffect(() => {
@@ -71,7 +71,7 @@ export default function BreathingZen({ onClose }: BreathingZenProps) {
     } else if (!completed) {
       playBowl();
     }
-  }, [isMuted, completed]);
+  }, [completed, isMuted, playBowl, stopBowl]);
 
   // 格式化秒数为 MM:SS
   const formatTime = (secs: number) => {

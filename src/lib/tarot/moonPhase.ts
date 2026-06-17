@@ -89,7 +89,8 @@ export function getTodayMoonPhase(dateInput?: Date): MoonPhaseInfo {
   };
 }
 
-export function getMoonSvgPath(iconType: string, percent: number): string {
+export function getMoonSvgPath(iconType: string, _percent: number): string {
+  void _percent;
   // 圆心是 50,50，半径是 38
   switch (iconType) {
     case 'full':

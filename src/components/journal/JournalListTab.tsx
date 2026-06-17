@@ -40,9 +40,11 @@ export default function JournalListTab({
     if (file) {
       onImport(file);
     }
+    e.target.value = '';
   };
 
   const triggerFileInput = () => {
+    setImportStatus({ type: null, message: '' });
     fileInputRef.current?.click();
   };
 

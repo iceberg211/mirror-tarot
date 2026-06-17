@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   getLocalReadings,
   getLocalCheckIns,
@@ -13,19 +13,20 @@ import {
   CheckInEntry,
   JournalEntry,
   JournalAnalytics,
-  getLocalDateString
+  getLocalDateString,
+  syncJournalData
 } from '@/lib/db/localJournal';
 import { useAudio } from '@/hooks/useAudio';
 
 export function useJournalData() {
-  const [entries, setEntries] = useState<JournalEntry[]>([]);
-  const [checkins, setCheckins] = useState<CheckInEntry[]>([]);
+  const [entries, setEntries] = useState<JournalEntry[]>(() => getLocalReadings());
+  const [checkins, setCheckins] = useState<CheckInEntry[]>(() => getLocalCheckIns());
   const [showCheckInPicker, setShowCheckInPicker] = useState(false);
 
   // 页签控制与分析数据
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
-  const [analytics, setAnalytics] = useState<JournalAnalytics | null>(null);
-  const [monthlyReport, setMonthlyReport] = useState('');
+  const [analytics, setAnalytics] = useState<JournalAnalytics | null>(() => getJournalAnalytics());
+  const [monthlyReport, setMonthlyReport] = useState(() => getLocalMonthlyReport());
   const [generatingReport, setGeneratingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
 
@@ -38,28 +39,40 @@ export function useJournalData() {
   const [selectedSpread, setSelectedSpread] = useState<string>('all');
   const [selectedMood, setSelectedMood] = useState<string>('all');
 
-  const refreshData = () => {
+  const refreshData = useCallback(() => {
     const readings = getLocalReadings();
     setEntries(readings);
 
     const history = getLocalCheckIns();
     setCheckins(history);
 
-    const anaData = getJournalAnalytics();
+    const anaData = getJournalAnalytics(readings, history);
     setAnalytics(anaData);
 
     const rpt = getLocalMonthlyReport();
     setMonthlyReport(rpt);
-  };
+  }, []);
 
   // 获取数据
   useEffect(() => {
-    // 异步延时加载以解决 React setState synchronous effect 规则警告
-    const timer = setTimeout(() => {
-      refreshData();
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
+    let cancelled = false;
+
+    // 触发云端数据同步并在同步完成后刷新 UI
+    syncJournalData()
+      .then((success) => {
+        if (cancelled) return;
+        if (success) {
+          refreshData();
+        }
+      })
+      .catch((err) => {
+        console.error('Trigger sync error on mount:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshData]);
 
   // 执行筛选 - 改用 useMemo 以解决 react-hooks/set-state-in-effect 报错并优化性能
   const filteredEntries = useMemo(() => {
@@ -170,13 +183,13 @@ export function useJournalData() {
         const resultText = event.target?.result as string;
         const ok = importJournalData(resultText);
         if (ok) {
-          setImportStatus({ type: 'success', message: '🎉 日记备份成功恢复并导入！' });
+          setImportStatus({ type: 'success', message: '日记备份已校验、合并并导入。' });
           refreshData();
         } else {
-          setImportStatus({ type: 'error', message: '❌ 导入失败：文件格式不合规。' });
+          setImportStatus({ type: 'error', message: '导入失败：文件格式或版本不合规。' });
         }
       } catch {
-        setImportStatus({ type: 'error', message: '❌ 导入失败：解析备份文件出错。' });
+        setImportStatus({ type: 'error', message: '导入失败：解析备份文件出错。' });
       }
     };
     reader.readAsText(file);

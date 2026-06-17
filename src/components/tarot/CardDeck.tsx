@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import CardBack from './CardBack';
 import { useAudio } from '@/hooks/useAudio';
@@ -29,15 +29,18 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
   // 挂载后自动执行洗牌和展牌过渡，无需繁琐的手动搅拌与切牌
   useEffect(() => {
     playShuffle();
+    let timer2: ReturnType<typeof setTimeout> | undefined;
     const timer1 = setTimeout(() => {
       setShufflingState('expanding');
-      const timer2 = setTimeout(() => {
+      timer2 = setTimeout(() => {
         setShufflingState('ready');
       }, 1500);
-      return () => clearTimeout(timer2);
     }, 1500);
-    return () => clearTimeout(timer1);
-  }, []);
+    return () => {
+      clearTimeout(timer1);
+      if (timer2) clearTimeout(timer2);
+    };
+  }, [playShuffle]);
 
   // 物理震动触发
   const triggerHaptic = () => {
@@ -279,6 +282,16 @@ interface CardWrapperProps {
 
 function CardWrapper({ index, isDrawn, angle, yOffset, triggerHaptic, onClick }: CardWrapperProps) {
   const [hovered, setHovered] = useState(false);
+  const particleConfigs = useMemo(
+    () =>
+      Array.from({ length: 4 }).map((_, particleIndex) => ({
+        x: 20 + seededRatio(index, particleIndex, 1) * 38,
+        scale: 0.5 + seededRatio(index, particleIndex, 2) * 0.7,
+        duration: 0.75 + seededRatio(index, particleIndex, 3) * 0.45,
+        delay: particleIndex * 0.18,
+      })),
+    [index]
+  );
 
   const handleTouch = () => {
     triggerHaptic();
@@ -322,14 +335,14 @@ function CardWrapper({ index, isDrawn, angle, yOffset, triggerHaptic, onClick }:
             {/* 升腾金色星砂粒子 */}
             {hovered && (
               <div className="absolute inset-0 pointer-events-none overflow-visible">
-                {Array.from({ length: 4 }).map((_, pIdx) => (
+                {particleConfigs.map((particle, pIdx) => (
                   <motion.div
                     key={pIdx}
                     initial={{
-                      x: 20 + Math.random() * 38,
+                      x: particle.x,
                       y: 110,
                       opacity: 0.9,
-                      scale: 0.5 + Math.random() * 0.7
+                      scale: particle.scale
                     }}
                     animate={{
                       y: -40,
@@ -337,10 +350,10 @@ function CardWrapper({ index, isDrawn, angle, yOffset, triggerHaptic, onClick }:
                       scale: 0.2
                     }}
                     transition={{
-                      duration: 0.75 + Math.random() * 0.45,
+                      duration: particle.duration,
                       ease: 'easeOut',
                       repeat: Infinity,
-                      delay: pIdx * 0.18
+                      delay: particle.delay
                     }}
                     className="absolute w-1 h-1 rounded-full bg-[#E5C158] shadow-[0_0_5px_#E5C158]"
                   />
@@ -352,4 +365,9 @@ function CardWrapper({ index, isDrawn, angle, yOffset, triggerHaptic, onClick }:
       </AnimatePresence>
     </div>
   );
+}
+
+function seededRatio(index: number, particleIndex: number, salt: number) {
+  const raw = Math.sin((index + 1) * 97.13 + (particleIndex + 1) * 31.7 + salt * 11.11) * 10000;
+  return raw - Math.floor(raw);
 }

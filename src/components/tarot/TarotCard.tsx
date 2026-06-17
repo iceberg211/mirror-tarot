@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { SelectedCard } from '@/lib/tarot/types';
 import CardBack from './CardBack';
@@ -13,9 +13,15 @@ interface TarotCardProps {
   onClick?: () => void;
   interactive?: boolean;
   className?: string;
-  enableScratch?: boolean;
   onScratchFinished?: () => void;
 }
+
+// 尺寸映射
+const sizeClasses = {
+  sm: 'w-[100px] h-[175px] text-xs',
+  md: 'w-[160px] h-[280px] text-sm',
+  lg: 'w-[220px] h-[385px] text-base',
+};
 
 export default function TarotCard({
   card,
@@ -24,28 +30,26 @@ export default function TarotCard({
   onClick,
   interactive = true,
   className = '',
-  enableScratch = false,
   onScratchFinished,
 }: TarotCardProps) {
   const { playReveal } = useAudio();
   const [imageError, setImageError] = useState(false);
+  const hasRevealedRef = useRef(false);
 
   useEffect(() => {
     if (revealed) {
-      playReveal();
-      // 如果外部传入了 onScratchFinished 回调，直接同步触发
-      if (onScratchFinished) {
-        onScratchFinished();
+      if (!hasRevealedRef.current) {
+        hasRevealedRef.current = true;
+        playReveal();
+        // 如果外部传入了 onScratchFinished 回调，直接同步触发
+        if (onScratchFinished) {
+          onScratchFinished();
+        }
       }
+    } else {
+      hasRevealedRef.current = false;
     }
-  }, [revealed]);
-
-  // 尺寸映射
-  const sizeClasses = {
-    sm: 'w-[100px] h-[175px] text-xs',
-    md: 'w-[160px] h-[280px] text-sm',
-    lg: 'w-[220px] h-[385px] text-base',
-  };
+  }, [onScratchFinished, playReveal, revealed]);
 
   const handleCardClick = () => {
     if (interactive && onClick) {

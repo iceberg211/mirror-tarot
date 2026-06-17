@@ -1,7 +1,8 @@
 import { createQwenChatStream } from '@/lib/ai/qwen';
-import { buildReadingPrompt } from '@/lib/ai/prompts';
+import { buildReadingSystemPrompt, buildReadingUserPrompt } from '@/lib/ai/prompts';
 import { getCardMeaning } from '@/lib/tarot/meanings';
 import { getSpreadByType } from '@/lib/tarot/spreads';
+import { SelectedCard } from '@/lib/tarot/types';
 
 export async function POST(req: Request) {
   try {
@@ -23,19 +24,25 @@ export async function POST(req: Request) {
     }
 
     // 装配带有具体牌义快照的上下文，发给大模型
-    const cardsWithMeanings = cards.map((c: any) => ({
+    const cardsWithMeanings = cards.map((c: SelectedCard) => ({
       card: c,
       meaning: getCardMeaning(c.id, c.orientation),
     }));
 
-    const promptText = buildReadingPrompt(question, mood, spread.name, cardsWithMeanings);
+    // 生成分离架构的 System 与 User Prompts
+    const systemPrompt = buildReadingSystemPrompt(cards.length);
+    const userPrompt = buildReadingUserPrompt(question, mood, spread.name, cardsWithMeanings);
 
-    // 一键调起公用流请求与 SSE 解析助手
-    return await createQwenChatStream([{ role: 'user', content: promptText }], 0.75);
+    // 调起公用流请求与 SSE 解析助手，传递双消息角色，提高生成质量与输出格式稳定性
+    return await createQwenChatStream([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ], 0.75);
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('API /api/reading Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: errMsg }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

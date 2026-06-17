@@ -1,19 +1,46 @@
 import { createQwenChatStream } from '@/lib/ai/qwen';
 
+interface ReportCheckIn {
+  date: string;
+  mood: string;
+}
+
+interface ReportCard {
+  zhName: string;
+  orientation: 'upright' | 'reversed';
+}
+
+interface ReportReading {
+  question: string;
+  mood: string;
+  cards: ReportCard[];
+}
+
+interface ReportTopCard {
+  zhName: string;
+  count: number;
+}
+
+interface ReportRequestBody {
+  checkins?: ReportCheckIn[];
+  readings?: ReportReading[];
+  topCards?: ReportTopCard[];
+}
+
 export async function POST(req: Request) {
   try {
-    const { checkins, readings, topCards } = await req.json();
+    const { checkins = [], readings = [], topCards = [] } = (await req.json()) as ReportRequestBody;
 
-    const checkinText = checkins && checkins.length > 0
-      ? checkins.map((c: any) => `* ${c.date}: ${c.mood}`).join('\n')
+    const checkinText = checkins.length > 0
+      ? checkins.map((c) => `* ${c.date}: ${c.mood}`).join('\n')
       : '无打卡历史';
 
-    const readingsText = readings && readings.length > 0
-      ? readings.map((r: any) => `* 问题: "${r.question}" | 情绪: ${r.mood} | 卡牌: ${r.cards.map((c: any) => `${c.zhName}(${c.orientation === 'reversed' ? '逆位' : '正位'})`).join(', ')}`).join('\n')
+    const readingsText = readings.length > 0
+      ? readings.map((r) => `* 问题: "${r.question}" | 情绪: ${r.mood} | 卡牌: ${r.cards.map((c) => `${c.zhName}(${c.orientation === 'reversed' ? '逆位' : '正位'})`).join(', ')}`).join('\n')
       : '无塔罗占卜记录';
 
-    const topCardsText = topCards && topCards.length > 0
-      ? topCards.map((tc: any, i: number) => `${i + 1}. ${tc.zhName} (出现 ${tc.count} 次)`).join('\n')
+    const topCardsText = topCards.length > 0
+      ? topCards.map((tc, i) => `${i + 1}. ${tc.zhName} (出现 ${tc.count} 次)`).join('\n')
       : '暂无高频卡牌';
 
     const promptText = `你是一位融合了经典塔罗神秘学、潜意识释梦、以及人本主义心理咨询的深度心理学导师。
@@ -51,9 +78,10 @@ ${topCardsText}
     // 一键调起公用流请求与 SSE 解析助手
     return await createQwenChatStream([{ role: 'user', content: promptText }], 0.8);
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('API /api/journal/report Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    return new Response(JSON.stringify({ error: errMsg }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

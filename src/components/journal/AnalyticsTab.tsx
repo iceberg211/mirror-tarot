@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { CheckInEntry, JournalAnalytics, JournalEntry } from '@/lib/db/localJournal';
 
 function parseMonthlyReport(text: string) {
   const sections = {
@@ -33,9 +34,9 @@ function parseMonthlyReport(text: string) {
 }
 
 interface AnalyticsTabProps {
-  analytics: any;
-  checkins: any[];
-  entries: any[];
+  analytics: JournalAnalytics | null;
+  checkins: CheckInEntry[];
+  entries: JournalEntry[];
   monthlyReport: string;
   generatingReport: boolean;
   reportError: string | null;
@@ -100,13 +101,13 @@ export default function AnalyticsTab({
               {/* 折线图与渐变区域 */}
               {(() => {
                 const trend = analytics.moodTrend;
-                const points = trend.map((point: any, idx: number) => {
+                const points = trend.map((point, idx) => {
                   const x = 30 + (idx * 350) / (trend.length - 1 || 1);
                   const y = 130 - ((point.score - 1) * 100) / 3;
                   return { x, y, ...point };
                 });
 
-                const pathD = points.map((p: any, i: number) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
                 const areaD = `${pathD} L ${points[points.length - 1].x} 130 L ${points[0].x} 130 Z`;
 
                 return (
@@ -119,7 +120,7 @@ export default function AnalyticsTab({
                       strokeWidth="1.5"
                       className="drop-shadow-[0_0_4px_rgba(201,167,106,0.4)] pointer-events-none"
                     />
-                    {points.map((p: any, i: number) => (
+                    {points.map((p, i) => (
                       <g key={i} className="group/dot cursor-pointer">
                         <circle
                           cx={p.x}
@@ -155,7 +156,7 @@ export default function AnalyticsTab({
         ) : (
           <div className="flex flex-col gap-3">
             <div className="flex justify-center gap-4 py-2">
-              {analytics.topCards.map((tc: any) => (
+              {analytics.topCards.map((tc) => (
                 <div key={tc.id} className="flex flex-col items-center scale-90 flex-shrink-0">
                   <div className="w-14 h-24 rounded-lg overflow-hidden border border-gold/25 relative shadow-gold-glow">
                     {/* eslint-disable-next-line @next/next/no-img-element */}

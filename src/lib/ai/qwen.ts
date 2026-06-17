@@ -109,7 +109,7 @@ export async function createQwenChatStream(
                 if (content) {
                   controller.enqueue(encoder.encode(content));
                 }
-              } catch (e) {
+              } catch {
                 // 忽略解析失败的 JSON 片段
               }
             }

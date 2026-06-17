@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, MessageCircle, Info, Flame, AlertCircle, Eye } from 'lucide-react';
+import { Info, Flame, AlertCircle, Eye } from 'lucide-react';
 import { SelectedCard, ParsedReading } from '@/lib/tarot/types';
 
 interface ReadingResultProps {
@@ -12,15 +12,22 @@ interface ReadingResultProps {
   activeFocusIndex?: number;
 }
 
+const TAB_CONFIG = [
+  { id: 'contradiction', name: '核心矛盾', icon: Info, key: 'contradiction' },
+  { id: 'overlooked', name: '忽略因素', icon: Eye, key: 'overlookedFactor' },
+  { id: 'advice', name: '建议行动', icon: Flame, key: 'actionAdvice' },
+  { id: 'reminder', name: '温柔提醒', icon: AlertCircle, key: 'gentleReminder' },
+] as const;
+
 export default function ReadingResult({ parsedReading, cards, generating, activeFocusIndex = -1 }: ReadingResultProps) {
   const [activeTab, setActiveTab] = useState<'contradiction' | 'overlooked' | 'advice' | 'reminder'>('contradiction');
 
-  const tabs = [
-    { id: 'contradiction', name: '核心矛盾', icon: Info, content: parsedReading.contradiction },
-    { id: 'overlooked', name: '忽略因素', icon: Eye, content: parsedReading.overlookedFactor },
-    { id: 'advice', name: '建议行动', icon: Flame, content: parsedReading.actionAdvice },
-    { id: 'reminder', name: '温柔提醒', icon: AlertCircle, content: parsedReading.gentleReminder },
-  ] as const;
+  const tabs = useMemo(() => TAB_CONFIG.map(tab => ({
+    id: tab.id,
+    name: tab.name,
+    icon: tab.icon,
+    content: parsedReading[tab.key]
+  })), [parsedReading]);
 
   return (
     <div className="w-full max-w-md px-6 flex flex-col gap-6 select-none pb-12">

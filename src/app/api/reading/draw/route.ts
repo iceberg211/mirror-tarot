@@ -9,7 +9,8 @@ export async function GET(request: Request) {
   try {
     const cards = drawCards(spreadType);
     return NextResponse.json({ success: true, cards });
-  } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ success: false, error: errMsg }, { status: 400 });
   }
 }

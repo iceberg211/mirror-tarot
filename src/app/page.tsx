@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Compass, HelpCircle, Eye, Sparkles, AlertCircle, Moon } from 'lucide-react';
+import { Sparkles, AlertCircle, Moon } from 'lucide-react';
 import BottomNav from '@/components/layout/BottomNav';
 import { spreads } from '@/lib/tarot/spreads';
 import { SpreadType } from '@/lib/tarot/types';

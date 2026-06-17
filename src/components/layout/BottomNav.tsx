@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Compass, BookOpen, User, Book } from 'lucide-react';
+import { Compass, BookOpen, Book } from 'lucide-react';
 
 export default function BottomNav() {
   const pathname = usePathname();

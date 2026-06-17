@@ -1,13 +1,22 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Book, Search, X, Moon, Compass, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tarotCards } from '@/lib/tarot/cards';
-import { getCardMeaning } from '@/lib/tarot/meanings';
 import { TarotCard as TarotCardType } from '@/lib/tarot/types';
 import TarotCard from '@/components/tarot/TarotCard';
 import BottomNav from '@/components/layout/BottomNav';
+import { getLocalReadings } from '@/lib/db/localJournal';
+
+interface MeaningsModuleType {
+  getCardMeaning: (cardId: string, orientation: 'upright' | 'reversed') => {
+    general: string;
+    love: string;
+    career: string;
+    advice: string;
+  };
+}
 
 export default function DeckPage() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -17,6 +26,34 @@ export default function DeckPage() {
   const [selectedCard, setSelectedCard] = useState<TarotCardType | null>(null);
   const [modalOrientation, setModalOrientation] = useState<'upright' | 'reversed'>('upright');
   const [modalRevealed, setModalRevealed] = useState(true);
+
+  // 动态载入的牌义模块缓存，实现按需加载
+  const [meaningsModule, setMeaningsModule] = useState<MeaningsModuleType | null>(null);
+
+  // 用户历史抽卡次数统计
+  const [drawnStats, setDrawnStats] = useState<Record<string, number>>({});
+
+  // 挂载时异步统计用户历史抽卡次数
+  useEffect(() => {
+    // 异步延时加载以解决 React setState synchronous effect 规则警告
+    const timer = setTimeout(() => {
+      try {
+        const readings = getLocalReadings();
+        const stats: Record<string, number> = {};
+        readings.forEach((r) => {
+          if (Array.isArray(r.cards)) {
+            r.cards.forEach((c) => {
+              stats[c.id] = (stats[c.id] || 0) + 1;
+            });
+          }
+        });
+        setDrawnStats(stats);
+      } catch (e) {
+        console.error('Failed to calculate drawn stats:', e);
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   // 筛选分类配置
   const filterTabs = [
@@ -45,16 +82,26 @@ export default function DeckPage() {
     });
   }, [searchQuery, filterType]);
 
-  // 获取选中卡片在弹窗里的具体牌义
+  // 获取选中卡片在弹窗里的具体牌义（通过动态载入的 meaningsModule）
   const cardMeaning = useMemo(() => {
-    if (!selectedCard) return null;
-    return getCardMeaning(selectedCard.id, modalOrientation);
-  }, [selectedCard, modalOrientation]);
+    if (!selectedCard || !meaningsModule) return null;
+    return meaningsModule.getCardMeaning(selectedCard.id, modalOrientation);
+  }, [selectedCard, modalOrientation, meaningsModule]);
 
-  const handleOpenModal = (card: TarotCardType) => {
+  // 点击开启 Modal 时触发异步 import()
+  const handleOpenModal = async (card: TarotCardType) => {
     setSelectedCard(card);
     setModalOrientation('upright');
     setModalRevealed(true);
+
+    if (!meaningsModule) {
+      try {
+        const mod = await import('@/lib/tarot/meanings');
+        setMeaningsModule(mod);
+      } catch (err) {
+        console.error('Failed to load card meanings library dynamically:', err);
+      }
+    }
   };
 
   return (
@@ -64,7 +111,7 @@ export default function DeckPage() {
       <div className="w-full max-w-md px-6 pt-12 flex flex-col items-start gap-1">
         <h1 className="text-2xl font-serif tracking-widest text-gold font-bold flex items-center gap-2">
           <Book className="w-5 h-5" />
-          <span>牌义百科</span>
+          <span>牌义图鉴</span>
         </h1>
         <p className="text-[10px] text-gold-muted/65 font-mono tracking-wider uppercase">
           Tarot Deck Meaning Encyclopedia
@@ -85,8 +132,9 @@ export default function DeckPage() {
           />
           {searchQuery && (
             <button
+              type="button"
               onClick={() => setSearchQuery('')}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-gold-muted/40 hover:text-gold mr-1"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-gold-muted/40 hover:text-gold mr-1 border-none bg-transparent"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -118,20 +166,37 @@ export default function DeckPage() {
         <div className="grid grid-cols-3 gap-3 my-3 flex-1 align-start">
           {filteredCards.length > 0 ? (
             filteredCards.map((card) => {
-              // 构建一个精致、轻量且高气质的静态牌库项
+              const count = drawnStats[card.id] || 0;
+              const isDrawn = count > 0;
+
               return (
                 <div
                   key={card.id}
                   onClick={() => handleOpenModal(card)}
-                  className="rounded-xl border border-gold/15 bg-[#0B0D13]/40 p-2 text-center hover:border-gold/35 hover:bg-[#11131A]/60 flex flex-col justify-between items-center aspect-[2/3.3] cursor-pointer transition-all duration-300 group"
+                  className={`rounded-xl border p-2 text-center flex flex-col justify-between items-center aspect-[2/3.3] cursor-pointer transition-all duration-300 group relative ${
+                    isDrawn
+                      ? 'border-gold/25 bg-[#11131A]/45 hover:border-gold/45 hover:bg-[#151722]/65 shadow-gold-glow'
+                      : 'border-dashed border-gold/10 bg-[#0B0D13]/10 opacity-75 hover:opacity-100 hover:border-gold/20'
+                  }`}
                 >
-                  {/* 静态卡面图片 */}
+                  {/* 已抽中的右上角次数徽标 */}
+                  {isDrawn && (
+                    <span className="absolute -top-1.5 -right-1.5 bg-[#C9A76A] text-black font-mono font-bold text-[8px] px-1.5 py-0.5 rounded-full z-10 shadow-md transform scale-90">
+                      x{count}
+                    </span>
+                  )}
+
+                  {/* 静态卡面图片，未抽中过展现灰度低明度 */}
                   <div className="w-full flex-1 rounded-lg bg-[#06080C] border border-gold/5 flex items-center justify-center relative overflow-hidden group-hover:border-gold/25 transition-all">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={card.image}
                       alt={card.zhName}
-                      className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity duration-300"
+                      className={`w-full h-full object-cover transition-all duration-500 ${
+                        isDrawn
+                          ? 'opacity-70 group-hover:opacity-100'
+                          : 'opacity-20 filter grayscale contrast-50 group-hover:opacity-45'
+                      }`}
                       onError={(e) => {
                         e.currentTarget.style.display = 'none';
                         const parent = e.currentTarget.parentElement;
@@ -152,10 +217,12 @@ export default function DeckPage() {
 
                   {/* 牌名 */}
                   <div className="w-full flex flex-col items-center mt-2.5">
-                    <span className="text-[11px] font-serif text-gold/85 font-medium tracking-widest truncate max-w-[80px]">
+                    <span className={`text-[11px] font-serif font-medium tracking-widest truncate max-w-[80px] ${
+                      isDrawn ? 'text-gold/85' : 'text-gold-muted/40'
+                    }`}>
                       {card.zhName}
                     </span>
-                    <span className="text-[7px] text-gold-muted/50 font-mono tracking-tighter truncate max-w-[80px] mt-0.5 uppercase">
+                    <span className="text-[7px] text-gold-muted/30 font-mono tracking-tighter truncate max-w-[80px] mt-0.5 uppercase">
                       {card.name}
                     </span>
                   </div>
@@ -173,7 +240,7 @@ export default function DeckPage() {
 
       {/* 4. 详细牌义百科 Modal */}
       <AnimatePresence>
-        {selectedCard && cardMeaning && (
+        {selectedCard && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-md p-4 select-none">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
@@ -189,9 +256,8 @@ export default function DeckPage() {
                 <X className="w-3.5 h-3.5" />
               </button>
 
-              {/* 弹窗头部卡牌 3D 渲染 */}
+              {/* 弹窗头部卡牌 3D 翻转展示 */}
               <div className="w-full flex flex-col items-center gap-2 mt-2">
-                {/* 借用真实 SelectedCard 类型做 3D 渲染 */}
                 <div className="scale-95 shadow-gold-glow">
                   <TarotCard
                     card={{
@@ -215,9 +281,19 @@ export default function DeckPage() {
                 <h2 className="text-lg font-serif text-gold font-bold tracking-widest">
                   {selectedCard.zhName}
                 </h2>
-                <span className="text-[10px] text-gold-muted/60 font-mono tracking-wider mt-0.5 uppercase">
+                <span className="text-[10px] text-gold-muted/65 font-mono tracking-wider mt-0.5 uppercase">
                   {selectedCard.name}
                 </span>
+
+                {/* 集卡成就唤醒次数小标语 */}
+                {(() => {
+                  const count = drawnStats[selectedCard.id] || 0;
+                  return (
+                    <span className="text-[9px] font-serif text-gold-focus mt-1 px-2.5 py-0.5 rounded-full bg-gold/5 border border-gold/10 tracking-widest">
+                      {count > 0 ? `✦ 累计已唤醒 ${count} 次 ✦` : '✦ 潜意识中尚未唤醒过此牌 ✦'}
+                    </span>
+                  );
+                })()}
 
                 {/* 正逆位快速切换按钮 */}
                 <div className="flex bg-[#07090F] p-0.5 rounded-lg border border-gold/15 mt-3.5 w-full max-w-[180px]">
@@ -248,49 +324,61 @@ export default function DeckPage() {
 
               {/* 各场景牌义详细展开 (通用/感情/工作/建议) */}
               <div className="flex flex-col gap-4 py-1">
-                {/* 1. 通用 */}
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] text-gold font-serif tracking-widest uppercase font-semibold flex items-center gap-1.5">
-                    <Sparkles className="w-3 h-3" />
-                    <span>通用启示</span>
-                  </span>
-                  <p className="text-[11px] text-foreground/85 font-serif leading-relaxed tracking-wide">
-                    {cardMeaning.general}
-                  </p>
-                </div>
+                {!meaningsModule ? (
+                  <div className="py-8 text-center text-xs text-gold-muted/50 font-serif animate-pulse">
+                    ✦ 正在加载牌义指引... ✦
+                  </div>
+                ) : !cardMeaning ? (
+                  <div className="py-8 text-center text-xs text-gold-muted/50 font-serif">
+                    ✦ 牌义信息暂缺 ✦
+                  </div>
+                ) : (
+                  <>
+                    {/* 1. 通用 */}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-gold font-serif tracking-widest uppercase font-semibold flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3" />
+                        <span>通用启示</span>
+                      </span>
+                      <p className="text-[11px] text-foreground/85 font-serif leading-relaxed tracking-wide font-medium">
+                        {cardMeaning.general}
+                      </p>
+                    </div>
 
-                {/* 2. 情感 */}
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] text-gold font-serif tracking-widest uppercase font-semibold flex items-center gap-1.5">
-                    <Moon className="w-3 h-3" />
-                    <span>感情与关系</span>
-                  </span>
-                  <p className="text-[11px] text-foreground/85 font-serif leading-relaxed tracking-wide">
-                    {cardMeaning.love}
-                  </p>
-                </div>
+                    {/* 2. 情感 */}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-gold font-serif tracking-widest uppercase font-semibold flex items-center gap-1.5">
+                        <Moon className="w-3 h-3" />
+                        <span>感情与关系</span>
+                      </span>
+                      <p className="text-[11px] text-foreground/85 font-serif leading-relaxed tracking-wide font-medium">
+                        {cardMeaning.love}
+                      </p>
+                    </div>
 
-                {/* 3. 职业 */}
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] text-gold font-serif tracking-widest uppercase font-semibold flex items-center gap-1.5">
-                    <Compass className="w-3 h-3" />
-                    <span>职业与抉择</span>
-                  </span>
-                  <p className="text-[11px] text-foreground/85 font-serif leading-relaxed tracking-wide">
-                    {cardMeaning.career}
-                  </p>
-                </div>
+                    {/* 3. 职业 */}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-gold font-serif tracking-widest uppercase font-semibold flex items-center gap-1.5">
+                        <Compass className="w-3 h-3" />
+                        <span>职业与抉择</span>
+                      </span>
+                      <p className="text-[11px] text-foreground/85 font-serif leading-relaxed tracking-wide font-medium">
+                        {cardMeaning.career}
+                      </p>
+                    </div>
 
-                {/* 4. 建议 */}
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] text-gold font-serif tracking-widest uppercase font-semibold flex items-center gap-1.5">
-                    <Sparkles className="w-3 h-3" />
-                    <span>行动指引</span>
-                  </span>
-                  <p className="text-[11px] text-foreground/85 font-serif leading-relaxed tracking-wide">
-                    {cardMeaning.advice}
-                  </p>
-                </div>
+                    {/* 4. 建议 */}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] text-gold font-serif tracking-widest uppercase font-semibold flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3" />
+                        <span>行动指引</span>
+                      </span>
+                      <p className="text-[11px] text-foreground/85 font-serif leading-relaxed tracking-wide font-medium">
+                        {cardMeaning.advice}
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             </motion.div>
           </div>

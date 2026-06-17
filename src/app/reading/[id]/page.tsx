@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useRef, Suspense } from 'react';
+import React, { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { ArrowLeft, MessageSquare, Trash2, Calendar, Send } from 'lucide-react';
 import TarotCard from '@/components/tarot/TarotCard';
 import ReadingResult from '@/components/tarot/ReadingResult';
 import BottomNav from '@/components/layout/BottomNav';
-import { getLocalReadingById, deleteLocalReading, updateLocalReading, JournalEntry } from '@/lib/db/localJournal';
+import { getLocalReadingById, deleteLocalReading, updateLocalReading, JournalEntry, syncJournalData } from '@/lib/db/localJournal';
 import { getSpreadByType } from '@/lib/tarot/spreads';
 import SharePoster from '@/components/tarot/SharePoster';
 import { useAudio } from '@/hooks/useAudio';
@@ -21,7 +21,7 @@ const defaultSuggestions = [
   '这组牌的反面提醒是什么？',
 ];
 
-function parseStreamingReading(text: string, cardCount: number): ParsedReading {
+function parseStreamingReading(text: string, cards: SelectedCard[]): ParsedReading {
   const sections = {
     questionSummary: '',
     intuitiveSummary: '',
@@ -30,7 +30,7 @@ function parseStreamingReading(text: string, cardCount: number): ParsedReading {
     actionAdvice: '',
     gentleReminder: '',
   };
-  const cardReadings = Array(cardCount).fill('');
+  const cardReadings = Array(cards.length).fill('');
 
   const parts = text.split('# ');
   parts.forEach((part) => {
@@ -43,7 +43,7 @@ function parseStreamingReading(text: string, cardCount: number): ParsedReading {
       sections.questionSummary = body.slice(0, 15) + '...';
     } else if (title.startsWith('CARD_READING_')) {
       const idx = parseInt(title.replace('CARD_READING_', ''), 10) - 1;
-      if (idx >= 0 && idx < cardCount) {
+      if (idx >= 0 && idx < cards.length) {
         cardReadings[idx] = body;
       }
     } else if (title.startsWith('CONTRADICTION')) {
@@ -59,11 +59,11 @@ function parseStreamingReading(text: string, cardCount: number): ParsedReading {
 
   return {
     ...sections,
-    cardReadings: cardReadings.map((body) => ({
-      positionName: '',
-      cardName: '',
-      cardZhName: '',
-      orientation: 'upright' as const,
+    cardReadings: cardReadings.map((body, index) => ({
+      positionName: cards[index]?.positionName || '',
+      cardName: cards[index]?.name || '',
+      cardZhName: cards[index]?.zhName || '',
+      orientation: cards[index]?.orientation || 'upright',
       interpretation: body,
     })),
     followUpSuggestions: defaultSuggestions,
@@ -111,7 +111,7 @@ function ReadingDetailContent() {
   
   // 引入元素冥想合成器
   const { playAmbient, stopAmbient, playElementAmbient, stopElementAmbient } = useAudio();
-  const [activeElement, setActiveElement] = useState<'water' | 'fire' | 'wind' | 'earth' | null>(null);
+  const activeElement = entry?.cards[0] ? getCardElement(entry.cards[0]) : null;
 
   // 追问对话状态
   const [chatInput, setChatInput] = useState('');
@@ -120,35 +120,56 @@ function ReadingDetailContent() {
   const [chatLoading, setChatLoading] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const generationAbortRef = useRef<AbortController | null>(null);
 
-  // 1. 加载数据并激活元素音效
+  // 1. 加载数据并激活元素音效与云同步
   useEffect(() => {
-    if (id) {
-      const data = getLocalReadingById(id);
-      if (data) {
-        // 延时加载以解决 React setState synchronous effect 规则警告
-        setTimeout(() => {
-          setEntry(data);
-          if (data.cards && data.cards.length > 0) {
-            const mainElement = getCardElement(data.cards[0]);
-            setActiveElement(mainElement);
-            playElementAmbient(mainElement);
-          }
-        }, 0);
+    let cancelled = false;
+
+    async function loadData() {
+      const localData = getLocalReadingById(id);
+      if (!cancelled && localData) {
+        setEntry(localData);
       }
-      setTimeout(() => {
-        setLoading(false);
-      }, 0);
+
+      try {
+        const synced = await syncJournalData();
+        if (!cancelled && synced) {
+          const syncedData = getLocalReadingById(id);
+          if (syncedData) setEntry(syncedData);
+        }
+      } catch (err) {
+        console.error('Reading page sync error:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    loadData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   // 2. 环境音生命周期清理
   useEffect(() => {
+    const mainCard = entry?.cards[0];
+    if (mainCard) {
+      playElementAmbient(getCardElement(mainCard));
+    }
+
     return () => {
       stopElementAmbient();
     };
-  }, [stopElementAmbient]);
+  }, [entry?.cards, playElementAmbient, stopElementAmbient]);
+
+  useEffect(() => {
+    return () => {
+      generationAbortRef.current?.abort();
+      stopAmbient();
+    };
+  }, [stopAmbient]);
 
   // 自动滚动聊天到底部
   useEffect(() => {
@@ -162,8 +183,14 @@ function ReadingDetailContent() {
     }
   };
 
-  const handleRegenerate = async () => {
+  const handleRegenerate = useCallback(async (signal?: AbortSignal) => {
     if (generating || !entry) return;
+    const controller = signal ? null : new AbortController();
+    const requestSignal = signal ?? controller?.signal;
+    if (controller) {
+      generationAbortRef.current = controller;
+    }
+
     setGenerating(true);
     setReadingText('');
     setReadingError(null);
@@ -179,6 +206,7 @@ function ReadingDetailContent() {
           spreadType: entry.spreadType,
           cards: entry.cards,
         }),
+        signal: requestSignal,
       });
 
       if (!response.ok) {
@@ -214,39 +242,62 @@ function ReadingDetailContent() {
         throw new Error('AI 生成的指引信息过短或不完整，请重试');
       }
 
-      const finalReading = parseStreamingReading(text, entry.cards.length);
+      const finalReading = parseStreamingReading(text, entry.cards);
       const ok = updateLocalReading(entry.id, finalReading);
       stopAmbient();
       
       if (ok) {
         setEntry((prev) => (prev ? { ...prev, reading: finalReading } : null));
+        if (trigger) {
+          router.replace(`/reading/${entry.id}`, { scroll: false });
+        }
       } else {
         throw new Error('本地日记更新失败');
       }
 
       setGenerating(false);
+      if (controller && generationAbortRef.current === controller) {
+        generationAbortRef.current = null;
+      }
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        stopAmbient();
+        setGenerating(false);
+        if (controller && generationAbortRef.current === controller) {
+          generationAbortRef.current = null;
+        }
+        return;
+      }
       console.error('Regenerate error:', err);
       stopAmbient();
       const errMsg = err instanceof Error ? err.message : String(err);
       setReadingError(errMsg || '重建情绪解读失败');
       setGenerating(false);
+      if (controller && generationAbortRef.current === controller) {
+        generationAbortRef.current = null;
+      }
     }
-  };
+  }, [entry, generating, playAmbient, router, stopAmbient, trigger]);
 
   // 3. 页面加载完毕后自动触发流式 AI 解读 (如果要求 trigger 或当前数据空白)
   useEffect(() => {
     if (!loading && entry) {
       const isEmpty = isReadingEmpty(entry.reading);
       if ((trigger || isEmpty) && !generating && !readingText && !readingError) {
-        // 延时触发以解决 React setState synchronous effect 规则警告
-        setTimeout(() => {
-          handleRegenerate();
-        }, 0);
+        const controller = new AbortController();
+        generationAbortRef.current = controller;
+        Promise.resolve().then(() => {
+          handleRegenerate(controller.signal);
+        });
+
+        return () => {
+          controller.abort();
+          generationAbortRef.current = null;
+        };
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, entry, trigger]);
+    return undefined;
+  }, [entry, generating, handleRegenerate, loading, readingError, readingText, trigger]);
 
   const handleSendFollowUp = async (inputText: string) => {
     if (!inputText.trim() || chatLoading || !entry) return;
@@ -357,7 +408,7 @@ function ReadingDetailContent() {
   };
 
   const parsedReading = generating 
-    ? parseStreamingReading(readingText, entry.cards.length) 
+    ? parseStreamingReading(readingText, entry.cards) 
     : entry.reading;
 
   // 计算当前大模型流式解读正聚焦在第几张卡牌的索引上
@@ -465,7 +516,7 @@ function ReadingDetailContent() {
               {readingError}
             </p>
             <button
-              onClick={handleRegenerate}
+              onClick={() => handleRegenerate()}
               className="mx-auto px-5 py-2.5 rounded-lg border border-red-800/40 bg-red-950/40 text-[10px] text-red-300 font-serif tracking-widest hover:bg-red-900/40 transition-all duration-300 cursor-pointer"
             >
               ✦ 点击重试重建 ✦
@@ -483,7 +534,7 @@ function ReadingDetailContent() {
               检测到此篇情绪日记缺少 AI 情绪解读，可能因为之前大模型接口配置有误或中断。
             </p>
             <button
-              onClick={handleRegenerate}
+              onClick={() => handleRegenerate()}
               className="mx-auto px-5 py-2.5 rounded-lg border border-gold/25 bg-gold/5 text-[10px] text-gold font-serif tracking-widest hover:bg-gold/10 transition-all duration-300 cursor-pointer shadow-gold-glow"
             >
               ✦ 重新唤醒 MIRROR 情绪解读 ✦
