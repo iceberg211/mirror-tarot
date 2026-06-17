@@ -70,6 +70,20 @@ function parseStreamingReading(text: string, cardCount: number) {
   };
 }
 
+function getCardElement(card: any): 'water' | 'fire' | 'wind' | 'earth' {
+  if (card.arcana === 'minor' && card.suit) {
+    if (card.suit === 'wands') return 'fire';
+    if (card.suit === 'cups') return 'water';
+    if (card.suit === 'swords') return 'wind';
+    if (card.suit === 'pentacles') return 'earth';
+  }
+  const num = card.number;
+  if ([2, 3, 12, 13, 18, 20].includes(num)) return 'water';
+  if ([1, 7, 10, 16, 19].includes(num)) return 'fire';
+  if ([0, 6, 11, 14, 17].includes(num)) return 'wind';
+  return 'earth';
+}
+
 function isReadingEmpty(reading: any): boolean {
   if (!reading) return true;
   const cardInterpretationsEmpty = reading.cardReadings?.every(
@@ -91,7 +105,10 @@ export default function ReadingDetailPage() {
   const [readingText, setReadingText] = useState('');
   const [readingError, setReadingError] = useState<string | null>(null);
   const [showZen, setShowZen] = useState(false);
-  const { playAmbient, stopAmbient } = useAudio();
+  
+  // 引入元素冥想合成器
+  const { playAmbient, stopAmbient, playElementAmbient, stopElementAmbient } = useAudio();
+  const [activeElement, setActiveElement] = useState<'water' | 'fire' | 'wind' | 'earth' | null>(null);
 
   // 追问对话状态
   const [chatInput, setChatInput] = useState('');
@@ -101,15 +118,28 @@ export default function ReadingDetailPage() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // 加载本地历史记录，并在完成加载后自动初始化播放对应卡牌的元素能量音效
   useEffect(() => {
     if (id) {
       const data = getLocalReadingById(id);
       if (data) {
         setEntry(data);
+        if (data.cards && data.cards.length > 0) {
+          const mainElement = getCardElement(data.cards[0]);
+          setActiveElement(mainElement);
+          playElementAmbient(mainElement);
+        }
       }
       setLoading(false);
     }
   }, [id]);
+
+  // 组件卸载时切断环境音
+  useEffect(() => {
+    return () => {
+      stopElementAmbient();
+    };
+  }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -282,8 +312,26 @@ export default function ReadingDetailPage() {
     minute: '2-digit',
   });
 
+  // 元素底色映射
+  const elementMainBgs = {
+    water: 'bg-[#050912]',
+    fire: 'bg-[#0C0604]',
+    wind: 'bg-[#07090C]',
+    earth: 'bg-[#040805]',
+  };
+
   return (
-    <main className="flex-grow min-h-screen pb-28 flex flex-col items-center text-foreground relative overflow-y-auto">
+    <main className={`flex-grow min-h-screen pb-28 flex flex-col items-center text-foreground relative overflow-y-auto transition-colors duration-1000 ${
+      activeElement ? elementMainBgs[activeElement] : 'bg-[#07090F]'
+    }`}>
+      {/* 四元素专属能量场背景发光圈 */}
+      <div className={`absolute inset-0 pointer-events-none transition-all duration-[1500ms] z-0 ${
+        activeElement === 'water' ? 'bg-radial-gradient from-blue-950/15 via-transparent to-transparent shadow-[inset_0_0_80px_rgba(29,78,216,0.06)]' :
+        activeElement === 'fire' ? 'bg-radial-gradient from-amber-950/15 via-transparent to-transparent shadow-[inset_0_0_80px_rgba(217,119,6,0.06)]' :
+        activeElement === 'wind' ? 'bg-radial-gradient from-slate-900/15 via-transparent to-transparent shadow-[inset_0_0_80px_rgba(100,116,139,0.06)]' :
+        activeElement === 'earth' ? 'bg-radial-gradient from-emerald-950/15 via-transparent to-transparent shadow-[inset_0_0_80px_rgba(16,185,129,0.06)]' :
+        'bg-radial-gradient from-gold/5 via-transparent to-transparent'
+      }`} />
       {/* 顶部 Header */}
       <div className="w-full max-w-md px-6 pt-6 flex justify-between items-center z-10">
         <button

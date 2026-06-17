@@ -24,6 +24,21 @@ const defaultSuggestions = [
   '这组牌的反面提醒是什么？',
 ];
 
+// 神秘学大阿卡纳与小阿卡纳四元素映射
+function getCardElement(card: SelectedCard): 'water' | 'fire' | 'wind' | 'earth' {
+  if (card.arcana === 'minor' && card.suit) {
+    if (card.suit === 'wands') return 'fire';
+    if (card.suit === 'cups') return 'water';
+    if (card.suit === 'swords') return 'wind';
+    if (card.suit === 'pentacles') return 'earth';
+  }
+  const num = card.number;
+  if ([2, 3, 12, 13, 18, 20].includes(num)) return 'water';
+  if ([1, 7, 10, 16, 19].includes(num)) return 'fire';
+  if ([0, 6, 11, 14, 17].includes(num)) return 'wind';
+  return 'earth';
+}
+
 // 解析流式带有锚点的 Markdown 文本
 function parseStreamingReading(text: string, cardCount: number): ParsedReading {
   const sections = {
@@ -90,11 +105,14 @@ function ReadingNewContent() {
   
   // 服务端预抽的真实牌
   const [serverCards, setServerCards] = useState<SelectedCard[]>([]);
-  const [drawnIndices, setDrawnIndices] = useState<number[]>([]);
   
   // 翻卡状态记录
   const [revealedStates, setRevealedStates] = useState<Record<number, boolean>>({});
   const [allRevealed, setAllRevealed] = useState(false);
+
+  // 擦拭状态记录
+  const [scratchedStates, setScratchedStates] = useState<Record<number, boolean>>({});
+  const [allScratched, setAllScratched] = useState(false);
 
   // AI 解读状态
   const [readingText, setReadingText] = useState('');
@@ -108,9 +126,19 @@ function ReadingNewContent() {
   const [chatLoading, setChatLoading] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  
+  // 引入元素背景音播放和停止
+  const { playAmbient, stopAmbient, playElementAmbient, stopElementAmbient } = useAudio();
+  const [activeElement, setActiveElement] = useState<'water' | 'fire' | 'wind' | 'earth' | null>(null);
   const [showShare, setShowShare] = useState(false);
   const [showZen, setShowZen] = useState(false);
-  const { playAmbient, stopAmbient } = useAudio();
+
+  // 页面卸载时安全停止元素音效
+  useEffect(() => {
+    return () => {
+      stopElementAmbient();
+    };
+  }, []);
 
   // 页面加载时自动静默调用 draw API
   useEffect(() => {
@@ -152,6 +180,17 @@ function ReadingNewContent() {
     }
   };
 
+  // 擦拭卡牌完成回调
+  const handleScratchCard = (index: number) => {
+    const newScratched = { ...scratchedStates, [index]: true };
+    setScratchedStates(newScratched);
+
+    // 只有当所有卡牌均已被翻开且迷雾完全被擦除后，才能亮起解读按钮
+    if (Object.keys(newScratched).length === (spread?.positions.length || 0)) {
+      setAllScratched(true);
+    }
+  };
+
   // 发起大模型流式解读请求
   const handleStartReading = async () => {
     if (generating) return;
@@ -159,6 +198,13 @@ function ReadingNewContent() {
     setGenerating(true);
     setReadingText('');
     setReadingError(null);
+
+    // 根据抽出的第一张牌（代表现状核心牌）获取主导星象元素，并播放对应的环境合成音
+    const mainElement = serverCards[0] ? getCardElement(serverCards[0]) : 'water';
+    setActiveElement(mainElement);
+    playElementAmbient(mainElement);
+    
+    // 开启文本流式打印的背景白噪声
     playAmbient();
 
     try {
@@ -279,8 +325,26 @@ function ReadingNewContent() {
 
   const parsedReading = parseStreamingReading(readingText, serverCards.length);
 
+  // 元素底色映射
+  const elementMainBgs = {
+    water: 'bg-[#050912]',
+    fire: 'bg-[#0C0604]',
+    wind: 'bg-[#07090C]',
+    earth: 'bg-[#040805]',
+  };
+
   return (
-    <main className="flex-grow min-h-screen pb-28 flex flex-col items-center text-foreground relative overflow-y-auto">
+    <main className={`flex-grow min-h-screen pb-28 flex flex-col items-center text-foreground relative overflow-y-auto transition-colors duration-1000 ${
+      activeElement ? elementMainBgs[activeElement] : 'bg-[#07090F]'
+    }`}>
+      {/* 四元素专属能量场背景发光圈 */}
+      <div className={`absolute inset-0 pointer-events-none transition-all duration-[1500ms] z-0 ${
+        activeElement === 'water' ? 'bg-radial-gradient from-blue-950/15 via-transparent to-transparent shadow-[inset_0_0_80px_rgba(29,78,216,0.06)]' :
+        activeElement === 'fire' ? 'bg-radial-gradient from-amber-950/15 via-transparent to-transparent shadow-[inset_0_0_80px_rgba(217,119,6,0.06)]' :
+        activeElement === 'wind' ? 'bg-radial-gradient from-slate-900/15 via-transparent to-transparent shadow-[inset_0_0_80px_rgba(100,116,139,0.06)]' :
+        activeElement === 'earth' ? 'bg-radial-gradient from-emerald-950/15 via-transparent to-transparent shadow-[inset_0_0_80px_rgba(16,185,129,0.06)]' :
+        'bg-radial-gradient from-gold/5 via-transparent to-transparent'
+      }`} />
       {/* 顶部栏 */}
       <div className="w-full max-w-md px-6 pt-6 flex justify-between items-center z-10">
         <button
@@ -351,7 +415,9 @@ function ReadingNewContent() {
                       revealed={isRevealed}
                       size="sm"
                       onClick={() => handleRevealCard(idx)}
-                      className="shadow-gold-glow-lg"
+                      enableScratch={true}
+                      onScratchFinished={() => handleScratchCard(idx)}
+                      className="shadow-gold-glow-lg animate-fadeIn"
                     />
                     <span className="text-[10px] text-gold-muted/70 mt-2 tracking-widest font-serif font-medium">
                       {card.positionName}
@@ -364,7 +430,7 @@ function ReadingNewContent() {
             {/* 下方解读触发大按钮 */}
             <div className="w-full px-4 h-16 flex items-center justify-center mt-6">
               <AnimatePresence>
-                {allRevealed && (
+                {allScratched && (
                   <motion.button
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}

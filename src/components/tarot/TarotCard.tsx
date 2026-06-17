@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { SelectedCard } from '@/lib/tarot/types';
 import CardBack from './CardBack';
+import MistScratch from './MistScratch';
 import { useAudio } from '@/hooks/useAudio';
 
 interface TarotCardProps {
@@ -13,6 +14,8 @@ interface TarotCardProps {
   onClick?: () => void;
   interactive?: boolean;
   className?: string;
+  enableScratch?: boolean;
+  onScratchFinished?: () => void;
 }
 
 export default function TarotCard({
@@ -22,15 +25,26 @@ export default function TarotCard({
   onClick,
   interactive = true,
   className = '',
+  enableScratch = false,
+  onScratchFinished,
 }: TarotCardProps) {
   const { playReveal } = useAudio();
   const [imageError, setImageError] = useState(false);
+  const [isScratched, setIsScratched] = useState(false);
 
+  // 如果状态在外部改变导致牌被盖回去，重置擦拭状态
   useEffect(() => {
-    if (revealed) {
-      playReveal();
+    if (!revealed) {
+      setIsScratched(false);
     }
   }, [revealed]);
+
+  useEffect(() => {
+    // 只有在不需要擦除的情况下，翻面时才立即响起磬声
+    if (revealed && !enableScratch) {
+      playReveal();
+    }
+  }, [revealed, enableScratch]);
 
   // 尺寸映射
   const sizeClasses = {
@@ -42,6 +56,14 @@ export default function TarotCard({
   const handleCardClick = () => {
     if (interactive && onClick) {
       onClick();
+    }
+  };
+
+  const handleScratchFinish = () => {
+    setIsScratched(true);
+    playReveal(); // 擦拭干净时播放亮磬声
+    if (onScratchFinished) {
+      onScratchFinished();
     }
   };
 
@@ -67,6 +89,10 @@ export default function TarotCard({
           className="absolute inset-0 backface-hidden z-20 rounded-xl overflow-hidden border border-gold/40 shadow-gold-glow bg-[#0E1017] p-2 flex flex-col justify-between"
           style={{ transform: 'rotateY(180deg)' }}
         >
+          {enableScratch && revealed && !isScratched && (
+            <MistScratch onFinish={handleScratchFinish} />
+          )}
+
           {/* 四角框饰 */}
           <div className="absolute inset-1 border border-gold/15 rounded-[10px] pointer-events-none" />
 
