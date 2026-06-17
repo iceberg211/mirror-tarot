@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import CardBack from './CardBack';
 import { useAudio } from '@/hooks/useAudio';
@@ -11,13 +11,11 @@ interface CardDeckProps {
   onComplete: (drawnIndices: number[]) => void;
 }
 
-type ShufflingState = 'initial' | 'stirring' | 'cutting' | 'expanding' | 'ready';
+type ShufflingState = 'shuffling' | 'expanding' | 'ready';
 
 export default function CardDeck({ neededCount, positions, onComplete }: CardDeckProps) {
-  const { playShuffle, playReveal, playShuffleScratch } = useAudio();
-  const [shufflingState, setShufflingState] = useState<ShufflingState>('initial');
-  const [shuffleProgress, setShuffleProgress] = useState(0);
-  const [cutStep, setCutStep] = useState<number[]>([]);
+  const { playShuffle, playReveal } = useAudio();
+  const [shufflingState, setShufflingState] = useState<ShufflingState>('shuffling');
   
   // 底部牌堆中的卡片（总共22张大阿卡纳卡背代表）
   const [cards, setCards] = useState(() =>
@@ -28,125 +26,18 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
   const [slotMapping, setSlotMapping] = useState<Record<number, number>>({});
   const [drawnCount, setDrawnCount] = useState(0);
 
-  // 搅拌洗牌阶段卡牌的随机浮动状态
-  const [stirringCards, setStirringCards] = useState<{ id: number; x: number; y: number; rotate: number }[]>([]);
-  const lastMousePos = useRef<{ x: number; y: number } | null>(null);
-  const accumDistance = useRef(0);
-
-  // 初始化搅拌卡牌的随机位置
+  // 挂载后自动执行洗牌和展牌过渡，无需繁琐的手动搅拌与切牌
   useEffect(() => {
-    if (shufflingState === 'initial') {
-      const initialStirring = Array.from({ length: 12 }).map((_, i) => ({
-        id: i,
-        x: Math.random() * 160 - 80,
-        y: Math.random() * 80 - 40,
-        rotate: Math.random() * 180 - 90,
-      }));
-      setStirringCards(initialStirring);
-      setShufflingState('stirring');
-    }
-  }, [shufflingState]);
-
-  // 搅拌阶段让卡牌进行缓慢的怠速漂浮
-  useEffect(() => {
-    if (shufflingState !== 'stirring') return;
-
-    const interval = setInterval(() => {
-      setStirringCards(prev =>
-        prev.map(c => ({
-          ...c,
-          x: c.x + (Math.random() * 20 - 10),
-          y: c.y + (Math.random() * 14 - 7),
-          rotate: c.rotate + (Math.random() * 30 - 15),
-        }))
-      );
-    }, 2500);
-
-    return () => clearInterval(interval);
-  }, [shufflingState]);
-
-  // 搅拌洗牌的手势跟踪
-  const handleStirMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (shufflingState !== 'stirring') return;
-
-    let clientX = 0;
-    let clientY = 0;
-    if ('touches' in e) {
-      if (e.touches.length === 0) return;
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    }
-
-    if (lastMousePos.current) {
-      const dx = clientX - lastMousePos.current.x;
-      const dy = clientY - lastMousePos.current.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      
-      accumDistance.current += dist;
-
-      // 每移动一定距离，播放卡牌摩擦音，并增加洗牌进度
-      if (accumDistance.current > 45) {
-        accumDistance.current = 0;
-        setShuffleProgress(prev => {
-          const next = Math.min(prev + 3, 100);
-          if (next >= 100) {
-            playReveal(); // 播放一声亮磬暗示洗牌结束
-            setTimeout(() => {
-              setShufflingState('cutting');
-            }, 600);
-          } else {
-            playShuffleScratch(0.045);
-          }
-          return next;
-        });
-
-        // 搅拌时让漂浮的卡牌跟着晃动一下，增加交互视觉回馈
-        setStirringCards(prev =>
-          prev.map(c => {
-            if (Math.random() > 0.6) {
-              return {
-                ...c,
-                x: Math.max(-120, Math.min(120, c.x + dx * 0.4)),
-                y: Math.max(-60, Math.min(60, c.y + dy * 0.4)),
-                rotate: c.rotate + (dx + dy) * 0.3,
-              };
-            }
-            return c;
-          })
-        );
-      }
-    }
-    lastMousePos.current = { x: clientX, y: clientY };
-  };
-
-  const handleStirEnd = () => {
-    lastMousePos.current = null;
-  };
-
-  // 点击进行切牌三叠拼合
-  const handleCutClick = (pileIdx: number) => {
-    if (shufflingState !== 'cutting' || cutStep.includes(pileIdx)) return;
-    playShuffleScratch(0.06);
-    
-    const nextSteps = [...cutStep, pileIdx];
-    setCutStep(nextSteps);
-
-    // 如果三叠牌全部被重新选定
-    if (nextSteps.length === 3) {
-      setTimeout(() => {
-        setShufflingState('expanding');
-        playShuffle(); // 播放展牌沙沙声
-        
-        // 展牌动画 1.5 秒后完成，可以开始选牌
-        setTimeout(() => {
-          setShufflingState('ready');
-        }, 1500);
-      }, 700);
-    }
-  };
+    playShuffle();
+    const timer1 = setTimeout(() => {
+      setShufflingState('expanding');
+      const timer2 = setTimeout(() => {
+        setShufflingState('ready');
+      }, 1500);
+      return () => clearTimeout(timer2);
+    }, 1500);
+    return () => clearTimeout(timer1);
+  }, []);
 
   // 物理震动触发
   const triggerHaptic = () => {
@@ -230,36 +121,15 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
       {/* 中间引导提示语 */}
       <div className="h-10 flex flex-col items-center justify-center my-1">
         <AnimatePresence mode="wait">
-          {shufflingState === 'stirring' && (
-            <motion.div
-              key="stirring"
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              className="flex flex-col items-center gap-2"
-            >
-              <p className="text-xs text-gold font-serif tracking-widest animate-pulse">
-                ✦ 闭上双眼，在下方打圈摩擦洗牌注入意念 ✦
-              </p>
-              {/* 极其精致的洗牌进度条 */}
-              <div className="w-44 h-1 bg-gold/15 rounded-full overflow-hidden relative">
-                <motion.div
-                  className="h-full bg-gradient-to-r from-gold/40 via-gold to-gold/40 shadow-gold-glow"
-                  style={{ width: `${shuffleProgress}%` }}
-                />
-              </div>
-            </motion.div>
-          )}
-
-          {shufflingState === 'cutting' && (
+          {shufflingState === 'shuffling' && (
             <motion.p
-              key="cutting"
+              key="shuffling"
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -5 }}
-              className="text-xs text-gold font-serif tracking-widest animate-pulse font-semibold"
+              className="text-xs text-gold-muted font-serif tracking-widest animate-pulse"
             >
-              ✦ 凭第一直觉，依次点击切分并拼合三叠牌堆 ({cutStep.length}/3) ✦
+              ✦ 闭上双眼，正在感应星轨洗牌中 ✦
             </motion.p>
           )}
 
@@ -269,9 +139,9 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -5 }}
-              className="text-xs text-gold-muted font-serif tracking-widest animate-[pulse_1s_infinite]"
+              className="text-xs text-gold font-serif tracking-widest animate-[pulse_1s_infinite] font-semibold"
             >
-              ✦ 破而后立，正在顺时针展牌 ✦
+              ✦ 洗牌完毕，正在铺开塔罗牌龙 ✦
             </motion.p>
           )}
 
@@ -289,82 +159,50 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
         </AnimatePresence>
       </div>
 
-      {/* 下方交互区域：根据状态机渲染不同的操作场景 */}
+      {/* 下方交互区域 */}
       <div className="w-full relative h-[190px] flex items-center justify-center overflow-hidden my-4">
         
         {/* 背景微光圈 */}
         <div className="absolute inset-0 bg-radial-gradient from-gold/5 via-transparent to-transparent pointer-events-none blur-xl" />
 
-        {/* 场景 1：手势搅拌洗牌 */}
-        {shufflingState === 'stirring' && (
-          <div
-            className="w-full h-full relative flex items-center justify-center touch-none"
-            onMouseMove={handleStirMove}
-            onMouseLeave={handleStirEnd}
-            onMouseUp={handleStirEnd}
-            onTouchMove={handleStirMove}
-            onTouchEnd={handleStirEnd}
-          >
-            {/* 混沌磁场圆形感应边界 */}
-            <div className="absolute w-[260px] h-[150px] rounded-full border border-dashed border-gold/10 flex items-center justify-center bg-gold/[0.01]" />
-            
-            {stirringCards.map(c => (
-              <motion.div
-                key={c.id}
-                animate={{
-                  x: c.x,
-                  y: c.y,
-                  rotate: c.rotate,
-                }}
-                transition={{ type: 'spring', stiffness: 20, damping: 10 }}
-                className="absolute w-[65px] h-[110px] pointer-events-none opacity-80"
-              >
-                <CardBack className="w-full h-full border border-gold/15" />
-              </motion.div>
-            ))}
-          </div>
-        )}
-
-        {/* 场景 2：切牌三叠仪式 */}
-        {shufflingState === 'cutting' && (
-          <div className="flex items-center gap-6 justify-center w-full h-full">
-            {[0, 1, 2].map(pileIdx => {
-              const clicked = cutStep.includes(pileIdx);
-              // 点击后的叠牌收拢动画位移
-              const animateX = clicked 
-                ? (1 - cutStep.indexOf(pileIdx)) * -10 // 被按顺序收拢到中间
-                : 0;
+        {/* 1. 自动洗牌叠牌状态 */}
+        {shufflingState === 'shuffling' && (
+          <div className="relative w-[100px] h-[135px] flex items-center justify-center">
+            {Array.from({ length: 8 }).map((_, idx) => {
+              // 模拟叠牌洗牌微弱错落动画
+              const rotateVal = (idx - 4) * 1.5;
+              const yOffset = -idx * 1.2;
 
               return (
-                <div
-                  key={pileIdx}
-                  onClick={() => handleCutClick(pileIdx)}
-                  className={`relative w-[65px] h-[110px] ${
-                    clicked ? 'pointer-events-none' : 'cursor-pointer hover:shadow-gold-glow border border-gold/15 rounded-lg'
-                  }`}
+                <motion.div
+                  key={idx}
+                  style={{
+                    position: 'absolute',
+                    width: '78px',
+                    height: '135px',
+                    top: yOffset,
+                    zIndex: idx,
+                  }}
+                  animate={{
+                    x: [0, (idx % 2 === 0 ? 8 : -8), 0],
+                    rotate: [rotateVal, rotateVal + (idx % 2 === 0 ? 3 : -3), rotateVal],
+                  }}
+                  transition={{
+                    duration: 0.6,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                    delay: idx * 0.05,
+                  }}
+                  className="shadow-gold-glow"
                 >
-                  <motion.div
-                    animate={{
-                      x: animateX,
-                      y: clicked ? -2 : 0,
-                      scale: clicked ? 0.95 : 1,
-                      opacity: clicked ? 0.4 : 1,
-                    }}
-                    transition={{ type: 'spring', stiffness: 80, damping: 15 }}
-                    className="w-full h-full"
-                  >
-                    {/* 给切牌的三个牌堆绘制几张卡牌叠加的效果，使其看起来像一沓牌 */}
-                    <div className="absolute top-1 left-1 w-full h-full bg-[#07090F] border border-gold/5 rounded-lg shadow-sm" />
-                    <div className="absolute top-0.5 left-0.5 w-full h-full bg-[#07090F] border border-gold/10 rounded-lg shadow-sm" />
-                    <CardBack className="w-full h-full relative z-10" />
-                  </motion.div>
-                </div>
+                  <CardBack className="border border-gold/15" />
+                </motion.div>
               );
             })}
           </div>
         )}
 
-        {/* 场景 3：呼啦摊牌展牌动画 */}
+        {/* 2. 自动依次展牌动画 */}
         {shufflingState === 'expanding' && (
           <div className="relative w-[100px] h-[135px] flex items-center justify-center">
             {cards.map((card, idx) => {
@@ -386,7 +224,7 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
                     type: 'spring',
                     stiffness: 85,
                     damping: 14,
-                    delay: idx * 0.035, // 呼啦依次展开排开
+                    delay: idx * 0.035,
                   }}
                 >
                   <CardBack className="w-full h-full border border-gold/15 shadow-gold-glow" />
@@ -396,7 +234,7 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
           </div>
         )}
 
-        {/* 场景 4：左右拨动牌堆手选抽牌 */}
+        {/* 3. 抽牌就绪：横向滚动牌龙 */}
         {shufflingState === 'ready' && (
           <div className="w-full h-full overflow-x-auto no-scrollbar py-6 flex items-center scroll-smooth snap-x snap-mandatory">
             <div className="flex items-center pl-[35vw] pr-[35vw] gap-0">
@@ -429,7 +267,7 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
   );
 }
 
-// 抽取出来的卡片包裹层，用来管理每张卡背独立的 Hover 状态并向上升腾粒子
+// 抽取出来的卡片包裹层，管理每张卡背独立的 Hover 状态并向上升腾粒子
 interface CardWrapperProps {
   index: number;
   isDrawn: boolean;
@@ -471,9 +309,9 @@ function CardWrapper({ index, isDrawn, angle, yOffset, triggerHaptic, onClick }:
               scale: 1,
             }}
             whileHover={{
-              y: yOffset - 32, // 悬停浮起动画
+              y: yOffset - 32,
               scale: 1.1,
-              rotate: 0, // 摆正
+              rotate: 0,
               transition: { duration: 0.22, ease: 'easeOut' }
             }}
             transition={{ type: 'spring', stiffness: 70, damping: 14 }}
@@ -481,7 +319,7 @@ function CardWrapper({ index, isDrawn, angle, yOffset, triggerHaptic, onClick }:
           >
             <CardBack className="w-full h-full" />
 
-            {/* 神秘上升粒子特效 (升腾金色星砂) */}
+            {/* 升腾金色星砂粒子 */}
             {hovered && (
               <div className="absolute inset-0 pointer-events-none overflow-visible">
                 {Array.from({ length: 4 }).map((_, pIdx) => (

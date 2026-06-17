@@ -9,9 +9,10 @@ interface ReadingResultProps {
   parsedReading: ParsedReading;
   cards: SelectedCard[];
   generating: boolean;
+  activeFocusIndex?: number;
 }
 
-export default function ReadingResult({ parsedReading, cards, generating }: ReadingResultProps) {
+export default function ReadingResult({ parsedReading, cards, generating, activeFocusIndex = -1 }: ReadingResultProps) {
   const [activeTab, setActiveTab] = useState<'contradiction' | 'overlooked' | 'advice' | 'reminder'>('contradiction');
 
   const tabs = [
@@ -72,7 +73,16 @@ export default function ReadingResult({ parsedReading, cards, generating }: Read
               
               {/* 卡牌文本内容 */}
               <p className="text-xs text-foreground/85 font-serif leading-relaxed tracking-wide pt-1">
-                {cardInterpretation?.interpretation || (
+                {cardInterpretation?.interpretation ? (
+                  <>
+                    {cardInterpretation.interpretation}
+                    {generating && activeFocusIndex === idx && (
+                      <span className="inline-block text-gold ml-1 font-sans font-bold animate-pulse select-none">
+                        ✦
+                      </span>
+                    )}
+                  </>
+                ) : (
                   generating ? (
                     <span className="text-gold-muted/30 animate-pulse">正在梳理牌面映射...</span>
                   ) : (

@@ -110,10 +110,6 @@ function ReadingNewContent() {
   const [revealedStates, setRevealedStates] = useState<Record<number, boolean>>({});
   const [allRevealed, setAllRevealed] = useState(false);
 
-  // 擦拭状态记录
-  const [scratchedStates, setScratchedStates] = useState<Record<number, boolean>>({});
-  const [allScratched, setAllScratched] = useState(false);
-
   // AI 解读状态
   const [readingText, setReadingText] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -180,16 +176,7 @@ function ReadingNewContent() {
     }
   };
 
-  // 擦拭卡牌完成回调
-  const handleScratchCard = (index: number) => {
-    const newScratched = { ...scratchedStates, [index]: true };
-    setScratchedStates(newScratched);
 
-    // 只有当所有卡牌均已被翻开且迷雾完全被擦除后，才能亮起解读按钮
-    if (Object.keys(newScratched).length === (spread?.positions.length || 0)) {
-      setAllScratched(true);
-    }
-  };
 
   // 发起大模型流式解读请求
   const handleStartReading = async () => {
@@ -325,6 +312,16 @@ function ReadingNewContent() {
 
   const parsedReading = parseStreamingReading(readingText, serverCards.length);
 
+  // 计算当前大模型流式解读正聚焦在第几张卡牌的索引上
+  const activeFocusIndex = (() => {
+    if (!generating) return -1;
+    const readings = parsedReading.cardReadings;
+    if (readings[2]?.interpretation && readings[2].interpretation.trim() !== '' && readings[2].interpretation.trim() !== '等待解读开始...') return 2;
+    if (readings[1]?.interpretation && readings[1].interpretation.trim() !== '' && readings[1].interpretation.trim() !== '等待解读开始...') return 1;
+    if (readings[0]?.interpretation && readings[0].interpretation.trim() !== '' && readings[0].interpretation.trim() !== '等待解读开始...') return 0;
+    return -1;
+  })();
+
   // 元素底色映射
   const elementMainBgs = {
     water: 'bg-[#050912]',
@@ -415,8 +412,6 @@ function ReadingNewContent() {
                       revealed={isRevealed}
                       size="sm"
                       onClick={() => handleRevealCard(idx)}
-                      enableScratch={true}
-                      onScratchFinished={() => handleScratchCard(idx)}
                       className="shadow-gold-glow-lg animate-fadeIn"
                     />
                     <span className="text-[10px] text-gold-muted/70 mt-2 tracking-widest font-serif font-medium">
@@ -430,7 +425,7 @@ function ReadingNewContent() {
             {/* 下方解读触发大按钮 */}
             <div className="w-full px-4 h-16 flex items-center justify-center mt-6">
               <AnimatePresence>
-                {allScratched && (
+                {allRevealed && (
                   <motion.button
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -451,16 +446,31 @@ function ReadingNewContent() {
         {step === 'reading' && (
           <div className="w-full flex flex-col items-center">
             
-            {/* 顶部小卡牌缩略图 */}
-            <div className="flex justify-center gap-3 my-6">
-              {serverCards.map((card) => (
-                <div key={card.id} className="flex flex-col items-center scale-90">
-                  <TarotCard card={card} revealed={true} size="sm" interactive={false} />
-                  <span className="text-[9px] text-gold-muted/50 mt-1.5 font-serif">
-                    {card.positionName}
-                  </span>
-                </div>
-              ))}
+            {/* 顶部小卡牌缩略图，根据流式解读当前聚焦的卡牌动态高亮 */}
+            <div className="flex justify-center gap-4 my-6">
+              {serverCards.map((card, idx) => {
+                const isFocused = activeFocusIndex === idx;
+                const isSomeFocused = activeFocusIndex !== -1;
+                return (
+                  <div
+                    key={card.id}
+                    className={`flex flex-col items-center transition-all duration-700 ${
+                      isFocused 
+                        ? 'scale-100 filter drop-shadow-[0_0_15px_rgba(201,167,106,0.6)]' 
+                        : isSomeFocused 
+                          ? 'scale-80 opacity-30 blur-[0.5px]' 
+                          : 'scale-90 opacity-90'
+                    }`}
+                  >
+                    <TarotCard card={card} revealed={true} size="sm" interactive={false} />
+                    <span className={`text-[9px] mt-1.5 font-serif tracking-widest transition-colors duration-500 ${
+                      isFocused ? 'text-gold font-semibold' : 'text-gold-muted/50'
+                    }`}>
+                      {card.positionName}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
 
             {/* AI解读文字渲染区 */}
@@ -468,6 +478,7 @@ function ReadingNewContent() {
               parsedReading={parsedReading}
               cards={serverCards}
               generating={generating}
+              activeFocusIndex={activeFocusIndex}
             />
 
             {/* AI 解读报错与重试 */}

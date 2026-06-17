@@ -72,7 +72,7 @@ export function useAudio() {
   };
 
   /**
-   * 1. 实时合成洗牌摩擦音 (White Noise with Envelope)
+   * 1. 实时合成洗牌摩擦音 (温润的纸质塔罗卡牌摩擦声)
    */
   const playShuffle = () => {
     if (isMuted) return;
@@ -90,23 +90,22 @@ export function useAudio() {
     const noiseSource = ctx.createBufferSource();
     noiseSource.buffer = buffer;
 
-    // 滤波器：过滤高频，让声音沙沙声更柔和，像卡牌摩擦
+    // 滤波器：使用低通滤波器过滤高频，截止频率设为 480Hz，使沙沙声更显厚重和柔和，去除金属塑料感
     const filter = ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(800, ctx.currentTime);
-    filter.Q.setValueAtTime(1.0, ctx.currentTime);
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(480, ctx.currentTime);
 
     // 增益节点（包络控制）
     const gainNode = ctx.createGain();
     const t = ctx.currentTime;
     
-    // 模拟洗牌的起伏感：快速往复切牌摩擦
+    // 模拟纸牌洗牌时层叠摩擦的渐起渐伏
     gainNode.gain.setValueAtTime(0, t);
-    gainNode.gain.linearRampToValueAtTime(0.08, t + 0.1);
-    gainNode.gain.linearRampToValueAtTime(0.02, t + 0.25);
-    gainNode.gain.linearRampToValueAtTime(0.07, t + 0.4);
-    gainNode.gain.linearRampToValueAtTime(0.01, t + 0.6);
-    gainNode.gain.linearRampToValueAtTime(0.06, t + 0.8);
+    gainNode.gain.linearRampToValueAtTime(0.045, t + 0.15);
+    gainNode.gain.linearRampToValueAtTime(0.015, t + 0.35);
+    gainNode.gain.linearRampToValueAtTime(0.04, t + 0.55);
+    gainNode.gain.linearRampToValueAtTime(0.01, t + 0.75);
+    gainNode.gain.linearRampToValueAtTime(0.035, t + 0.95);
     gainNode.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
 
     // 连线: Source -> Filter -> Gain -> Destination
@@ -119,8 +118,9 @@ export function useAudio() {
   };
 
   /**
-   * 2. 实时合成水晶清响翻牌音 (Sine waves with exponential decay chime)
-   * 双谐波振荡叠加 (A5: 880Hz + E6: 1320Hz)
+   * 2. 实时合成大三度和弦水晶磬翻牌音 (Warm Triad Chime Chord)
+   * 融合 A4(440Hz), C#5(554.37Hz), E5(659.25Hz), A5(880Hz)
+   * 增添微弱的 A3(220Hz) 三角波以加强磬底的实体温润质感，长达 3.2 秒的长衰减余音
    */
   const playReveal = () => {
     if (isMuted) return;
@@ -130,48 +130,81 @@ export function useAudio() {
     const t = ctx.currentTime;
     const gainNode = ctx.createGain();
     gainNode.gain.setValueAtTime(0, t);
-    gainNode.gain.linearRampToValueAtTime(0.12, t + 0.02); // 瞬态敲击起音
-    gainNode.gain.exponentialRampToValueAtTime(0.001, t + 2.0); // 2秒清脆长延音
+    gainNode.gain.linearRampToValueAtTime(0.09, t + 0.025); // 柔和起音
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, t + 3.2); // 3.2秒悠长余音
 
-    // 基音：880Hz (纯净高雅)
-    const osc1 = ctx.createOscillator();
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(880, t);
+    // 1. 基音：A4 (440Hz) - 温和明朗
+    const oscRoot = ctx.createOscillator();
+    oscRoot.type = 'sine';
+    oscRoot.frequency.setValueAtTime(440, t);
 
-    // 泛音：1320Hz (增添空灵感)
-    const osc2 = ctx.createOscillator();
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(1320, t);
-    
-    // 微弱三度泛音：1760Hz
-    const osc3 = ctx.createOscillator();
-    osc3.type = 'sine';
-    osc3.frequency.setValueAtTime(1760, t);
+    // 2. 三度音：C#5 (554.37Hz) - 带来神秘大三度明亮感
+    const oscThird = ctx.createOscillator();
+    oscThird.type = 'sine';
+    oscThird.frequency.setValueAtTime(554.37, t);
 
-    const osc2Gain = ctx.createGain();
-    osc2Gain.gain.setValueAtTime(0.04, t);
-    
-    const osc3Gain = ctx.createGain();
-    osc3Gain.gain.setValueAtTime(0.01, t);
+    // 3. 五度音：E5 (659.25Hz) - 巩固空灵感
+    const oscFifth = ctx.createOscillator();
+    oscFifth.type = 'sine';
+    oscFifth.frequency.setValueAtTime(659.25, t);
+
+    // 4. 八度泛音：A5 (880Hz) - 提供清脆感
+    const oscOctave = ctx.createOscillator();
+    oscOctave.type = 'sine';
+    oscOctave.frequency.setValueAtTime(880, t);
+
+    // 5. 实体铜底：A3 (220Hz) - 三角波
+    const oscBase = ctx.createOscillator();
+    oscBase.type = 'triangle';
+    oscBase.frequency.setValueAtTime(220, t);
+
+    // 为各声部配置独立的声部增益，防止声音过载且令听感极富层次
+    const gainRoot = ctx.createGain();
+    gainRoot.gain.setValueAtTime(0.06, t);
+
+    const gainThird = ctx.createGain();
+    gainThird.gain.setValueAtTime(0.028, t);
+
+    const gainFifth = ctx.createGain();
+    gainFifth.gain.setValueAtTime(0.025, t);
+
+    const gainOctave = ctx.createGain();
+    gainOctave.gain.setValueAtTime(0.012, t);
+
+    const gainBase = ctx.createGain();
+    gainBase.gain.setValueAtTime(0.015, t); // 三角波底色极其细微
 
     // 连接
-    osc1.connect(gainNode);
-    
-    osc2.connect(osc2Gain);
-    osc2Gain.connect(gainNode);
-    
-    osc3.connect(osc3Gain);
-    osc3Gain.connect(gainNode);
+    oscRoot.connect(gainRoot);
+    gainRoot.connect(gainNode);
+
+    oscThird.connect(gainThird);
+    gainThird.connect(gainNode);
+
+    oscFifth.connect(gainFifth);
+    gainFifth.connect(gainNode);
+
+    oscOctave.connect(gainOctave);
+    gainOctave.connect(gainNode);
+
+    oscBase.connect(gainBase);
+    gainBase.connect(gainNode);
 
     gainNode.connect(ctx.destination);
 
-    osc1.start(t);
-    osc2.start(t);
-    osc3.start(t);
+    // 启动
+    oscRoot.start(t);
+    oscThird.start(t);
+    oscFifth.start(t);
+    oscOctave.start(t);
+    oscBase.start(t);
 
-    osc1.stop(t + 2.0);
-    osc2.stop(t + 2.0);
-    osc3.stop(t + 2.0);
+    // 停止
+    oscRoot.stop(t + 3.2);
+    oscThird.stop(t + 3.2);
+    oscFifth.stop(t + 3.2);
+    oscOctave.stop(t + 3.2);
+    oscBase.stop(t + 3.2);
   };
 
   /**
