@@ -12,12 +12,19 @@ interface CardDeckProps {
 }
 
 export default function CardDeck({ neededCount, positions, onComplete }: CardDeckProps) {
-  const { playShuffle } = useAudio();
-  const [drawnCount, setDrawnCount] = useState(0);
+  const { playShuffle, playReveal } = useAudio();
   const [shuffling, setShuffling] = useState(true);
-  const [drawnCards, setDrawnCards] = useState<number[]>([]); // 记录被抽中的临时索引
+  
+  // 底部牌堆中的卡片（总共22张大阿卡纳卡背代表）
+  const [cards, setCards] = useState(() =>
+    Array.from({ length: 22 }).map((_, i) => ({ index: i, isDrawn: false }))
+  );
+  
+  // 记录牌阵卡槽 [0, 1, 2] 分别对应抽了牌堆里的第几张牌的 index
+  const [slotMapping, setSlotMapping] = useState<Record<number, number>>({});
+  const [drawnCount, setDrawnCount] = useState(0);
 
-  // 模拟自动洗牌 1.5 秒
+  // 1. 模拟洗牌 1.5 秒，播放洗牌音效
   useEffect(() => {
     playShuffle();
     const timer = setTimeout(() => {
@@ -26,46 +33,64 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
     return () => clearTimeout(timer);
   }, []);
 
-  const handleDraw = () => {
-    if (drawnCount >= neededCount || shuffling) return;
-    const newDrawn = [...drawnCards, drawnCount];
-    setDrawnCards(newDrawn);
-    setDrawnCount(drawnCount + 1);
+  // 2. 点击抽出底部牌堆里的某张牌
+  const handleDrawCard = (cardIndex: number) => {
+    if (shuffling || drawnCount >= neededCount) return;
+    
+    // 如果该张牌已经被抽走，不可重复抽取
+    const targetCard = cards.find(c => c.index === cardIndex);
+    if (!targetCard || targetCard.isDrawn) return;
 
-    if (drawnCount + 1 === neededCount) {
-      onComplete(newDrawn);
+    // 播放水晶翻牌磬声
+    playReveal();
+
+    // 更新牌龙的抽取状态
+    setCards(prev => prev.map(c => c.index === cardIndex ? { ...c, isDrawn: true } : c));
+
+    // 绑定卡槽映射
+    const newMapping = { ...slotMapping, [drawnCount]: cardIndex };
+    setSlotMapping(newMapping);
+    
+    const nextDrawnCount = drawnCount + 1;
+    setDrawnCount(nextDrawnCount);
+
+    // 如果抽满了
+    if (nextDrawnCount === neededCount) {
+      // 提取被抽中的卡牌索引数组传回父组件，父组件会拿它当随机数种子去跟真实卡牌做映射
+      const drawnIndices = Array.from({ length: neededCount }).map((_, idx) => newMapping[idx]);
+      
+      // 延迟 0.9s 执行 onComplete，让飞入跨容器 Shared Layout 动画播放完毕
+      setTimeout(() => {
+        onComplete(drawnIndices);
+      }, 900);
     }
   };
 
-  // 生成卡牌堆叠的辅助数组（只用来渲染一叠厚厚的牌的效果）
-  const stackCards = Array.from({ length: 8 });
-
   return (
-    <div className="w-full flex flex-col items-center justify-between min-h-[480px] py-4">
-      {/* 1. 上方：牌阵空白卡槽 (Positions) */}
+    <div className="w-full flex flex-col items-center justify-between min-h-[490px] py-4 select-none">
+      
+      {/* 上方：牌阵空白卡槽 (Drawn Positions) */}
       <div className="w-full max-w-md px-4 flex justify-center gap-3 md:gap-5 my-6">
         {positions.map((posName, idx) => {
-          const isDrawn = idx < drawnCount;
+          const mappedCardIndex = slotMapping[idx];
+          const hasCard = mappedCardIndex !== undefined;
+
           return (
-            <div
-              key={idx}
-              className="flex flex-col items-center flex-1 max-w-[120px]"
-            >
-              {/* 空白卡槽容器 */}
-              <div className="relative w-full aspect-[2/3.5] rounded-xl border border-dashed border-gold/25 bg-[#0B0D13]/60 flex items-center justify-center overflow-hidden">
-                {/* 如果已被抽中，用动画把牌飞进这里 */}
-                {isDrawn ? (
+            <div key={idx} className="flex flex-col items-center flex-1 max-w-[120px]">
+              {/* 卡槽容器 */}
+              <div className="relative w-full aspect-[2/3.5] rounded-xl border border-dashed border-gold/25 bg-[#0B0D13]/60 flex items-center justify-center overflow-visible">
+                {hasCard ? (
+                  // 使用 layoutId 让卡牌从底部飞到这里
                   <motion.div
-                    initial={{ scale: 0.5, y: 200, opacity: 0, rotate: -10 }}
-                    animate={{ scale: 1, y: 0, opacity: 1, rotate: 0 }}
-                    transition={{ type: 'spring', stiffness: 80, damping: 15 }}
-                    className="w-full h-full p-0.5"
+                    layoutId={`deck-card-${mappedCardIndex}`}
+                    className="w-full h-full p-0.5 relative z-20"
+                    transition={{ type: 'spring', stiffness: 95, damping: 15 }}
                   >
-                    <CardBack className="shadow-none border-gold/50" />
+                    <CardBack className="shadow-gold-glow border-gold/60" />
                   </motion.div>
                 ) : (
-                  /* 空槽的虚线十字和位置序号 */
-                  <div className="flex flex-col items-center gap-1 select-none pointer-events-none">
+                  /* 空槽十字 */
+                  <div className="flex flex-col items-center gap-1 select-none pointer-events-none opacity-50">
                     <span className="text-gold/45 text-[10px] font-mono">✦ {idx + 1} ✦</span>
                     <div className="w-4 h-4 text-gold/30">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -77,8 +102,7 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
                 )}
               </div>
               
-              {/* 位置名称标签 (例如: 现状 / 阻碍 / 建议) */}
-              <span className="text-[11px] md:text-xs text-gold/80 font-serif tracking-widest mt-2 text-center">
+              <span className="text-[11px] md:text-xs text-gold/80 font-serif tracking-widest mt-2.5 text-center font-medium">
                 {posName}
               </span>
             </div>
@@ -86,8 +110,8 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
         })}
       </div>
 
-      {/* 2. 中间提示 */}
-      <div className="h-6 flex items-center justify-center my-2">
+      {/* 中间引导提示语 */}
+      <div className="h-6 flex items-center justify-center my-1">
         <AnimatePresence mode="wait">
           {shuffling ? (
             <motion.p
@@ -97,78 +121,94 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
               exit={{ opacity: 0, y: -5 }}
               className="text-xs text-gold-muted font-serif tracking-widest animate-pulse"
             >
-              ✦ 冥想您的困惑，正在神秘洗牌中 ✦
+              ✦ 闭上双眼，正在感应星轨洗牌中 ✦
             </motion.p>
           ) : drawnCount < neededCount ? (
             <motion.p
-              key="prompt"
+              key="picking"
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -5 }}
-              className="text-xs text-gold font-serif tracking-wider font-semibold animate-pulse"
+              className="text-xs text-gold font-serif tracking-widest animate-pulse font-semibold"
             >
-              ✦ 凭第一直觉，点击下方卡组抽取第 {drawnCount + 1} 张牌 ✦
+              ✦ 左右拨动牌堆，凭第一直觉点击抽选 {drawnCount + 1}/{neededCount} 张牌 ✦
             </motion.p>
           ) : (
             <motion.p
-              key="done"
+              key="complete"
               initial={{ opacity: 0, y: 5 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -5 }}
-              className="text-xs text-gold-muted font-serif tracking-widest"
+              className="text-xs text-gold-muted font-serif tracking-widest animate-[pulse_1.5s_infinite]"
             >
-              ✦ 抽牌已完成，等待揭示 ✦
+              ✦ 选定完毕，正在同步心智映射 ✦
             </motion.p>
           )}
         </AnimatePresence>
       </div>
 
-      {/* 3. 下方：洗牌堆叠卡组 (Interactive Deck Stack) */}
-      <div className="relative w-full h-[180px] flex items-center justify-center mt-6 select-none">
-        {drawnCount < neededCount && (
-          <div
-            onClick={handleDraw}
-            className={`relative w-[100px] h-[160px] cursor-pointer ${
-              shuffling ? 'pointer-events-none' : ''
-            }`}
-          >
-            {stackCards.map((_, idx) => {
-              // 洗牌时做小幅左右扇形散开动画，非洗牌时堆叠在一起
-              const rotateVal = shuffling ? (idx - 4) * 8 : (idx - 3) * 0.8;
-              const xOffset = shuffling ? (idx - 4) * 12 : 0;
-              const yOffset = -idx * 1.5;
+      {/* 下方：支持横向滑动的扇形重叠牌龙 */}
+      <div className="w-full relative h-[190px] flex items-center justify-center overflow-hidden my-4">
+        
+        {/* 背景微光圈 */}
+        <div className="absolute inset-0 bg-radial-gradient from-gold/5 via-transparent to-transparent pointer-events-none blur-xl" />
+
+        {/* 隐藏滚动条的水平长卷滚动条 */}
+        <div className="w-full h-full overflow-x-auto no-scrollbar py-6 flex items-center scroll-smooth snap-x snap-mandatory">
+          {/* 两侧 padding 占位，确保最左/最右的卡牌可以被拨动到屏幕正中间 */}
+          <div className="flex items-center pl-[35vw] pr-[35vw] gap-0">
+            {cards.map((card) => {
+              const { index, isDrawn } = card;
+
+              // 计算当前卡背的圆弧排布（rotate 与 y 位移）
+              // 22 张卡，中心在 10.5。离中心越远，旋转度 rotate 越大，向下弯曲偏移 y 越大
+              const relativeIndex = index - 10.5;
+              const angle = shuffling ? 0 : relativeIndex * 2.2; // 洗牌时合拢(0度)，洗牌完展开
+              const yOffset = shuffling ? 0 : Math.pow(Math.abs(relativeIndex), 1.7) * 0.16;
 
               return (
-                <motion.div
-                  key={idx}
+                <div
+                  key={index}
+                  className="flex-shrink-0 snap-center relative"
                   style={{
-                    position: 'absolute',
-                    width: '100%',
-                    height: '100%',
-                    top: yOffset,
-                    left: 0,
-                    zIndex: idx,
+                    // 负边距实现横向重叠长龙
+                    marginLeft: index === 0 ? '0px' : '-3.5rem', 
+                    zIndex: isDrawn ? 10 : index,
                   }}
-                  animate={{
-                    rotate: rotateVal,
-                    x: xOffset,
-                  }}
-                  transition={{
-                    type: 'spring',
-                    stiffness: 100,
-                    damping: 20,
-                    delay: idx * 0.05,
-                  }}
-                  whileHover={!shuffling ? { scale: 1.05, y: yOffset - 5 } : {}}
-                  className="shadow-gold-glow"
                 >
-                  <CardBack className="border-gold/30" />
-                </motion.div>
+                  <AnimatePresence>
+                    {!isDrawn && (
+                      <motion.div
+                        layoutId={`deck-card-${index}`}
+                        onClick={() => handleDrawCard(index)}
+                        animate={{
+                          rotate: angle,
+                          y: yOffset,
+                          scale: shuffling ? 0.9 : 1,
+                        }}
+                        whileHover={!shuffling ? {
+                          y: yOffset - 32, // 悬停浮起动画
+                          scale: 1.1,
+                          rotate: 0, // 悬停时摆正
+                          zIndex: 100, // 确保浮起在最前
+                          transition: { duration: 0.25, ease: 'easeOut' }
+                        } : {}}
+                        transition={{ type: 'spring', stiffness: 70, damping: 14 }}
+                        className={`w-[78px] h-[135px] rounded-lg cursor-pointer ${
+                          shuffling ? 'pointer-events-none opacity-85' : 'hover:shadow-gold-glow-lg border border-gold/10'
+                        }`}
+                      >
+                        <CardBack className="w-full h-full" />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               );
             })}
           </div>
-        )}
+        </div>
+
       </div>
+
     </div>
   );
 }
