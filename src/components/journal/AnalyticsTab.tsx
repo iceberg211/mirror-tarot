@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import { CheckInEntry, JournalAnalytics, JournalEntry } from '@/lib/db/localJournal';
 import { moodConfigs } from '@/lib/tarot/moods';
 import { CloudSun, CloudRain, CloudLightning, Sun, Cloud } from 'lucide-react';
@@ -54,8 +55,10 @@ export default function AnalyticsTab({
   reportError,
   onGenerateReport
 }: AnalyticsTabProps) {
+  const [analysisNow] = React.useState(() => Date.now());
+
   const mindWeather = React.useMemo(() => {
-    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const thirtyDaysAgo = analysisNow - 30 * 24 * 60 * 60 * 1000;
     const moodCounts = { light: 0, shadow: 0, storm: 0 };
     let totalCount = 0;
     
@@ -134,12 +137,15 @@ export default function AnalyticsTab({
     }
     
     return { title, description, advice, themeColor, bgGlow, icon };
-  }, [checkins, entries]);
+  }, [analysisNow, checkins, entries]);
 
   if (!analytics) return null;
 
+  const panelClass = 'w-full border-y border-gold/12 py-4 flex flex-col gap-3';
+  const panelHeaderClass = 'flex justify-between items-center border-b border-gold/10 pb-2 text-[10px] text-gold font-serif font-semibold tracking-widest uppercase';
+
   return (
-    <div className="w-full flex flex-col gap-6 animate-fadeIn pb-12 mt-2">
+    <div className="w-full flex flex-col gap-8 animate-fadeIn pb-12">
       {/* 本月心灵天气晴雨表 */}
       {(() => {
         const weather = mindWeather;
@@ -147,11 +153,11 @@ export default function AnalyticsTab({
         return (
           <div
             style={{
-              background: `radial-gradient(circle at 90% 10%, ${weather.bgGlow}, transparent 55%), #0F1117`
+              background: `radial-gradient(circle at 90% 10%, ${weather.bgGlow}, transparent 58%), transparent`
             }}
-            className="w-full p-4.5 rounded-xl border border-gold/15 bg-[#0F1117]/60 flex gap-4 items-start shadow-gold-glow animate-fadeIn"
+            className="w-full border-y border-gold/12 py-4 flex gap-4 items-start animate-fadeIn"
           >
-            <div className={`w-12 h-12 rounded-full border border-gold/15 flex items-center justify-center flex-shrink-0 bg-card/40 ${weather.themeColor} shadow-gold-glow`}>
+            <div className={`w-12 h-12 rounded-full border border-gold/15 flex items-center justify-center flex-shrink-0 bg-[#0B0D13]/65 ${weather.themeColor}`}>
               <WeatherIcon className="w-6 h-6 animate-[pulse_3s_infinite]" />
             </div>
             
@@ -175,8 +181,8 @@ export default function AnalyticsTab({
         );
       })()}
       {/* 情绪波动图表 */}
-      <div className="w-full p-4 rounded-xl border border-gold/15 bg-[#0F1117]/60 flex flex-col gap-3 shadow-gold-glow">
-        <div className="flex justify-between items-center border-b border-gold/10 pb-2 text-[10px] text-gold font-serif font-bold tracking-widest uppercase">
+      <div className={panelClass}>
+        <div className={panelHeaderClass}>
           <span>情绪起伏水位线 ✦ Mood Trend</span>
           <span className="text-[8px] text-gold-muted/60 font-mono">
             {checkins.length + entries.length} RECORDINGS
@@ -261,8 +267,8 @@ export default function AnalyticsTab({
       </div>
 
       {/* 潜意识能量雷达 (NEW P1) */}
-      <div className="w-full p-4 rounded-xl border border-gold/15 bg-[#0F1117]/60 flex flex-col gap-3 shadow-gold-glow animate-fadeIn">
-        <div className="flex justify-between items-center border-b border-gold/10 pb-2 text-[10px] text-gold font-serif font-bold tracking-widest uppercase">
+      <div className={`${panelClass} animate-fadeIn`}>
+        <div className={panelHeaderClass}>
           <span>潜意识能量雷达 ✦ Element Radar</span>
           <span className="text-[8px] text-gold-muted/60 font-mono">30 DAYS Energy</span>
         </div>
@@ -361,16 +367,22 @@ export default function AnalyticsTab({
 
       {/* 潜意识人格原型 (NEW P1) */}
       {analytics.dominantArchetype && (
-        <div className="w-full p-4 rounded-xl border border-gold/15 bg-[#0F1117]/60 flex flex-col gap-3 shadow-gold-glow animate-fadeIn">
-          <div className="flex justify-between items-center border-b border-gold/10 pb-2 text-[10px] text-gold font-serif font-bold tracking-widest uppercase">
+        <div className={`${panelClass} animate-fadeIn`}>
+          <div className={panelHeaderClass}>
             <span>潜意识人格原型 ✦ Subconscious Archetype</span>
             <span className="text-[8px] text-gold-muted/60 font-mono">30 DAYS Archetype</span>
           </div>
 
           <div className="flex gap-4 items-center p-1">
-            <div className="w-14 h-24 rounded-lg overflow-hidden border border-gold/25 relative shadow-gold-glow flex-shrink-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={analytics.dominantArchetype.image} alt={analytics.dominantArchetype.zhName} className="w-full h-full object-cover" />
+            <div className="w-14 h-24 rounded-lg overflow-hidden border border-gold/18 relative flex-shrink-0">
+              <Image
+                src={analytics.dominantArchetype.image}
+                alt={analytics.dominantArchetype.zhName}
+                width={56}
+                height={96}
+                sizes="56px"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div className="flex flex-col gap-2">
               <span className="text-xs font-serif text-gold font-semibold tracking-widest">
@@ -385,8 +397,8 @@ export default function AnalyticsTab({
       )}
 
       {/* 高频潜意识卡牌 */}
-      <div className="w-full p-4 rounded-xl border border-gold/15 bg-[#0F1117]/60 flex flex-col gap-3 shadow-gold-glow">
-        <div className="flex justify-between items-center border-b border-gold/10 pb-2 text-[10px] text-gold font-serif font-bold tracking-widest uppercase">
+      <div className={panelClass}>
+        <div className={panelHeaderClass}>
           <span>高频潜意识镜像 ✦ Top Mirror Cards</span>
           <span className="text-[8px] text-gold-muted/60 font-mono">30 DAYS Freq</span>
         </div>
@@ -400,9 +412,15 @@ export default function AnalyticsTab({
             <div className="flex justify-center gap-4 py-2">
               {analytics.topCards.map((tc) => (
                 <div key={tc.id} className="flex flex-col items-center scale-90 flex-shrink-0">
-                  <div className="w-14 h-24 rounded-lg overflow-hidden border border-gold/25 relative shadow-gold-glow">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={tc.image} alt={tc.zhName} className="w-full h-full object-cover" />
+                  <div className="w-14 h-24 rounded-lg overflow-hidden border border-gold/18 relative">
+                    <Image
+                      src={tc.image}
+                      alt={tc.zhName}
+                      width={56}
+                      height={96}
+                      sizes="56px"
+                      className="w-full h-full object-cover"
+                    />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end justify-center pb-1">
                       <span className="text-[9px] text-gold font-serif font-bold">{tc.zhName}</span>
                     </div>
@@ -421,8 +439,8 @@ export default function AnalyticsTab({
       </div>
 
       {/* 月度 AI 镜面报告信札 */}
-      <div className="w-full p-5 rounded-xl border border-gold/15 bg-[#11131A]/60 flex flex-col gap-4 shadow-gold-glow relative overflow-hidden">
-        <div className="flex justify-between items-center border-b border-gold/10 pb-2 text-[10px] text-gold font-serif font-bold tracking-widest uppercase">
+      <div className={`${panelClass} relative overflow-hidden`}>
+        <div className={panelHeaderClass}>
           <span>月度潜意识镜面信札 ✦ AI Reflections</span>
           <span className="text-[8px] text-gold-muted/60 font-mono">QWEN LITERARY</span>
         </div>

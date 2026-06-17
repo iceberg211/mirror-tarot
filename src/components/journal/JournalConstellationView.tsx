@@ -77,15 +77,15 @@ export default function JournalConstellationView({
 
   if (filteredEntries.length === 0) {
     return (
-      <div className="w-full py-12 border border-dashed border-gold/10 rounded-xl bg-card/25 text-center">
-        <p className="text-xs text-gold-muted/50 font-serif">✦ 暂无日记数据以绘制星轨图 ✦</p>
+      <div className="w-full py-12 border-y border-dashed border-gold/12 text-center">
+        <p className="text-xs text-gold-muted/50 font-serif">暂无日记数据以绘制星轨图。</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full flex flex-col gap-4.5 animate-fadeIn">
-      <div className="relative w-full rounded-xl border border-gold/15 bg-[#0F1117]/60 shadow-gold-glow p-4 flex flex-col gap-2.5 overflow-hidden">
+    <div className="w-full flex flex-col gap-5 animate-fadeIn">
+      <div className="relative w-full border-y border-gold/12 py-4 flex flex-col gap-2.5 overflow-hidden">
         {/* 星空背景衬托 */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(201,167,106,0.015)_0%,_transparent_70%)] pointer-events-none" />
         
@@ -247,7 +247,7 @@ export default function JournalConstellationView({
           });
           
           return (
-            <div className="w-full p-4 rounded-xl border border-gold/20 bg-gradient-to-b from-[#15130E]/50 to-[#0C0E14]/70 shadow-gold-glow animate-slideUp flex flex-col gap-3">
+            <div className="w-full border-y border-gold/12 py-4 animate-slideUp flex flex-col gap-3">
               <div className="flex justify-between items-center border-b border-gold/10 pb-1.5 text-[9px] text-gold-muted/80 font-serif">
                 <span className="flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5 text-gold-muted/50" />
@@ -267,7 +267,7 @@ export default function JournalConstellationView({
               
               <Link
                 href={`/reading/${activeEntry.id}`}
-                className="w-full py-1.5 rounded-lg border border-gold/25 bg-gold/5 text-gold text-[10px] font-serif tracking-widest text-center hover:bg-gold/10 transition-all cursor-pointer shadow-gold-glow"
+                className="w-full py-2 rounded-full border border-gold/25 bg-gold/5 text-gold text-[10px] font-serif tracking-widest text-center hover:bg-gold/10 transition-all cursor-pointer"
               >
                 阅读这期心智测算报告 ➔
               </Link>
@@ -275,8 +275,8 @@ export default function JournalConstellationView({
           );
         })()
       ) : (
-        <div className="w-full py-6 text-center border border-dashed border-gold/10 rounded-xl bg-card/10 text-[10px] text-gold-muted/40 font-serif">
-          ✦ 点击上方的星轨星点，阅读对应日记的潜意识投射 ✦
+        <div className="w-full py-6 text-center border-y border-dashed border-gold/10 text-[10px] text-gold-muted/40 font-serif">
+          点击上方星点，阅读对应日记。
         </div>
       )}
     </div>

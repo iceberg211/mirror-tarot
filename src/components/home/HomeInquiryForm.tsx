@@ -1,0 +1,252 @@
+'use client';
+
+import React from 'react';
+import { motion } from 'framer-motion';
+import { AlertCircle, ArrowLeft, Sparkles } from 'lucide-react';
+import { questionTemplates } from '@/hooks/useHomeReadingFlow';
+import { moodConfigs } from '@/lib/tarot/moods';
+import { spreads } from '@/lib/tarot/spreads';
+import { SpreadType } from '@/lib/tarot/types';
+
+interface HomeInquiryFormProps {
+  question: string;
+  onQuestionChange: (question: string) => void;
+  selectedMood: string;
+  onMoodChange: (mood: string) => void;
+  selectedSpread: SpreadType;
+  onSpreadChange: (spread: SpreadType) => void;
+  customCardCount: number;
+  customPositionNames: string[];
+  error: string;
+  isDream: boolean;
+  onBack: () => void;
+  onTemplateSelect: (template: string) => void;
+  onCustomCardCountChange: (count: number) => void;
+  onCustomPositionChange: (index: number, value: string) => void;
+  onSubmit: (event: React.FormEvent) => void;
+}
+
+const spreadOrder: SpreadType[] = [
+  'three_cards',
+  'mirror_cross',
+  'one_card',
+  'relationship',
+  'career',
+  'shadow',
+  'choice',
+  'custom',
+];
+
+const moodToneMap = {
+  light: 'border-amber-400/70 bg-amber-300/10 text-amber-200',
+  shadow: 'border-blue-400/70 bg-blue-300/10 text-blue-200',
+  storm: 'border-purple-400/70 bg-purple-300/10 text-purple-200',
+};
+
+export default function HomeInquiryForm({
+  question,
+  onQuestionChange,
+  selectedMood,
+  onMoodChange,
+  selectedSpread,
+  onSpreadChange,
+  customCardCount,
+  customPositionNames,
+  error,
+  isDream,
+  onBack,
+  onTemplateSelect,
+  onCustomCardCountChange,
+  onCustomPositionChange,
+  onSubmit,
+}: HomeInquiryFormProps) {
+  const activeMood = moodConfigs.find((mood) => mood.id === selectedMood) || moodConfigs[0];
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.42, ease: 'easeOut' }}
+      className="mx-auto w-full max-w-md px-6 pt-6 pb-8"
+    >
+      <button
+        type="button"
+        onClick={onBack}
+        className="mb-6 flex items-center gap-2 text-xs font-serif tracking-widest text-gold-muted/80 transition-colors duration-300 hover:text-gold"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        返回入口
+      </button>
+
+      <form onSubmit={onSubmit} className="flex flex-col gap-7">
+        <div>
+          <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-gold-muted/55">
+            Inquiry
+          </p>
+          <h2 className="mt-2 text-2xl font-serif font-semibold leading-tight tracking-normal text-gold">
+            {isDream ? '把梦写下来' : '把问题写下来'}
+          </h2>
+          <p className="mt-3 text-xs font-serif leading-6 tracking-wide text-foreground/68">
+            不需要完整、漂亮或正确，只要接近此刻真实的念头。
+          </p>
+        </div>
+
+        <div className="flex gap-2 overflow-x-auto py-1 no-scrollbar">
+          {questionTemplates.map((template) => (
+            <button
+              key={template}
+              type="button"
+              onClick={() => onTemplateSelect(template)}
+              className="shrink-0 rounded-full border border-gold/12 px-3 py-1.5 text-[10px] font-serif tracking-wide text-gold-muted/78 transition-all duration-300 hover:border-gold/35 hover:text-gold"
+            >
+              {template}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative border-b border-gold/18 pb-3 focus-within:border-gold/45">
+          <textarea
+            value={question}
+            onChange={(event) => onQuestionChange(event.target.value)}
+            placeholder={isDream ? '记录梦里的碎片、情绪或冲突……' : '把你现在的困惑写下来……'}
+            className="h-28 w-full resize-none bg-transparent pr-8 text-base font-serif leading-8 tracking-wide text-foreground/92 outline-none placeholder:text-gold-muted/35 no-scrollbar"
+            maxLength={400}
+          />
+          <Sparkles className="absolute bottom-5 right-1 h-5 w-5 text-gold/35" />
+        </div>
+
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-1.5 text-[10px] text-red-300"
+          >
+            <AlertCircle className="h-3.5 w-3.5" />
+            <span>{error}</span>
+          </motion.div>
+        )}
+
+        <section className="flex flex-col gap-3">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-[0.26em] text-gold-muted/50">Mood</p>
+              <h3 className="mt-1 text-sm font-serif tracking-widest text-gold">现在的感受</h3>
+            </div>
+            <p className="max-w-[150px] text-right text-[10px] font-serif leading-5 tracking-wide text-gold-muted/65">
+              {activeMood.description}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-4 gap-2.5">
+            {moodConfigs.map((mood) => {
+              const isSelected = selectedMood === mood.id;
+              return (
+                <button
+                  key={mood.id}
+                  type="button"
+                  onClick={() => onMoodChange(mood.id)}
+                  className={`h-12 rounded-full border text-[11px] font-serif tracking-widest transition-all duration-300 ${
+                    isSelected
+                      ? moodToneMap[mood.category]
+                      : 'border-gold/10 bg-transparent text-gold-muted/60 hover:border-gold/28 hover:text-gold-muted'
+                  }`}
+                >
+                  {mood.name}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <div>
+            <p className="text-[10px] font-mono uppercase tracking-[0.26em] text-gold-muted/50">Spread</p>
+            <h3 className="mt-1 text-sm font-serif tracking-widest text-gold">选择牌阵</h3>
+          </div>
+
+          <div className="flex flex-col divide-y divide-gold/10 border-y border-gold/10">
+            {spreadOrder.map((type) => {
+              const spread = spreads[type];
+              const isSelected = selectedSpread === type;
+              const positionText = spread.positions.length > 0 ? spread.positions.join(' / ') : '自由定义';
+
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => onSpreadChange(type)}
+                  className="grid min-h-[62px] grid-cols-[1fr_auto] items-center gap-4 py-3 text-left"
+                >
+                  <span>
+                    <span className={`block text-xs font-serif font-semibold tracking-widest ${isSelected ? 'text-gold' : 'text-foreground/82'}`}>
+                      {spread.name}
+                    </span>
+                    <span className="mt-1 block text-[9px] font-serif tracking-wide text-gold-muted/58">
+                      {positionText}
+                    </span>
+                  </span>
+                  <span className={`h-2.5 w-2.5 rounded-full ${isSelected ? 'bg-gold shadow-[0_0_12px_rgba(201,167,106,0.8)]' : 'bg-gold/18'}`} />
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {selectedSpread === 'custom' && (
+          <motion.section
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col gap-4 border-y border-gold/12 py-4"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-serif tracking-widest text-gold">自定义位置</span>
+              <div className="flex gap-2">
+                {[1, 2, 3].map((count) => (
+                  <button
+                    key={count}
+                    type="button"
+                    onClick={() => onCustomCardCountChange(count)}
+                    className={`h-8 w-8 rounded-full border text-[11px] font-mono transition-all duration-300 ${
+                      customCardCount === count
+                        ? 'border-gold bg-gold/10 text-gold'
+                        : 'border-gold/12 text-gold-muted/60 hover:border-gold/35'
+                    }`}
+                  >
+                    {count}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {Array.from({ length: customCardCount }).map((_, index) => (
+                <label key={index} className="flex flex-col gap-1.5">
+                  <span className="text-[9px] font-serif tracking-widest text-gold-muted/55">
+                    位置 {index + 1}
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    value={customPositionNames[index] || ''}
+                    onChange={(event) => onCustomPositionChange(index, event.target.value)}
+                    placeholder="输入觉察名"
+                    maxLength={6}
+                    className="h-9 border-b border-gold/12 bg-transparent text-xs font-serif tracking-widest text-gold outline-none transition-colors duration-300 placeholder:text-gold-muted/30 focus:border-gold/45"
+                  />
+                </label>
+              ))}
+            </div>
+          </motion.section>
+        )}
+
+        <motion.button
+          type="submit"
+          whileTap={{ scale: 0.98 }}
+          className="h-12 w-full rounded-full border border-gold/45 bg-gold/10 text-sm font-serif font-semibold tracking-[0.24em] text-gold shadow-gold-glow transition-all duration-300 hover:bg-gold/15 hover:border-gold"
+        >
+          开始抽牌
+        </motion.button>
+      </form>
+    </motion.section>
+  );
+}

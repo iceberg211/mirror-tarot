@@ -46,17 +46,17 @@ export default function JournalListTab({
   const [privacyMode, setPrivacyMode] = useState(false);
 
   return (
-    <div className="w-full flex flex-col gap-4">
+    <div className="w-full flex flex-col gap-5">
       {/* 筛选控制器 */}
       {entries.length > 0 && (
-        <div className="flex gap-3 bg-[#0E1017]/40 border border-gold/10 p-3 rounded-xl select-none items-end">
+        <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-3 border-y border-gold/12 py-4 select-none items-end">
           {/* 牌阵筛选 */}
           <div className="flex-1 flex flex-col gap-1">
             <span className="text-[9px] text-gold-muted/60 font-serif tracking-wider">按牌阵</span>
             <select
               value={selectedSpread}
               onChange={(e) => setSelectedSpread(e.target.value)}
-              className="w-full bg-[#11131A] border border-gold/15 rounded-lg py-1.5 px-2 text-xs text-gold outline-none cursor-pointer"
+              className="w-full bg-transparent border-b border-gold/15 py-1.5 text-xs text-gold outline-none cursor-pointer focus:border-gold/45"
             >
               <option value="all">全部牌阵</option>
               {Object.entries(spreads).map(([key, value]) => (
@@ -73,7 +73,7 @@ export default function JournalListTab({
             <select
               value={selectedMood}
               onChange={(e) => setSelectedMood(e.target.value)}
-              className="w-full bg-[#11131A] border border-gold/15 rounded-lg py-1.5 px-2 text-xs text-gold outline-none cursor-pointer"
+              className="w-full bg-transparent border-b border-gold/15 py-1.5 text-xs text-gold outline-none cursor-pointer focus:border-gold/45"
             >
               <option value="all">全部情绪</option>
               {moodList.map((mood) => (
@@ -90,10 +90,10 @@ export default function JournalListTab({
             <button
               type="button"
               onClick={() => setDreamOnly(!dreamOnly)}
-              className={`w-9 h-7.5 rounded-lg border flex items-center justify-center cursor-pointer transition-all duration-300 ${
+              className={`w-9 h-8 rounded-full border flex items-center justify-center cursor-pointer transition-all duration-300 ${
                 dreamOnly
-                  ? 'border-blue-400/80 bg-blue-950/20 text-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.25)]'
-                  : 'border-gold/15 bg-[#11131A] text-gold-muted/50 hover:border-gold/30 hover:text-gold'
+                  ? 'border-blue-400/70 bg-blue-950/15 text-blue-300'
+                  : 'border-gold/15 bg-transparent text-gold-muted/50 hover:border-gold/30 hover:text-gold'
               }`}
               title={dreamOnly ? '仅看梦境记录已开启' : '一键筛选梦境记录'}
             >
@@ -107,10 +107,10 @@ export default function JournalListTab({
             <button
               type="button"
               onClick={() => setPrivacyMode(!privacyMode)}
-              className={`w-9 h-7.5 rounded-lg border flex items-center justify-center cursor-pointer transition-all duration-300 ${
+              className={`w-9 h-8 rounded-full border flex items-center justify-center cursor-pointer transition-all duration-300 ${
                 privacyMode
-                  ? 'border-gold bg-gold/10 text-gold shadow-gold-glow'
-                  : 'border-gold/15 bg-[#11131A] text-gold-muted/50 hover:border-gold/30 hover:text-gold'
+                  ? 'border-gold/50 bg-gold/10 text-gold'
+                  : 'border-gold/15 bg-transparent text-gold-muted/50 hover:border-gold/30 hover:text-gold'
               }`}
               title={privacyMode ? '隐私防窥模式已开启' : '一键开启毛玻璃防窥'}
             >
@@ -122,13 +122,17 @@ export default function JournalListTab({
 
       {/* 视图切换 */}
       {entries.length > 0 && (
-        <div className="flex justify-end gap-2 px-1 mt-1">
+        <div className="flex justify-between items-center px-1">
+          <span className="text-[10px] font-mono uppercase tracking-[0.24em] text-gold-muted/45">
+            {filteredEntries.length} Records
+          </span>
+          <div className="flex gap-2">
           <button
             type="button"
             onClick={() => setViewMode('list')}
-            className={`px-3 py-1 rounded-lg text-[10px] font-serif tracking-widest border transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-full text-[10px] font-serif tracking-widest border transition-all cursor-pointer ${
               viewMode === 'list'
-                ? 'border-gold text-gold bg-gold/5 shadow-gold-glow font-semibold'
+                ? 'border-gold/45 text-gold bg-gold/8 font-semibold'
                 : 'border-gold/10 text-gold-muted/50 hover:border-gold/25'
             }`}
           >
@@ -142,19 +146,20 @@ export default function JournalListTab({
                 setActiveEntryId(filteredEntries[0].id);
               }
             }}
-            className={`px-3 py-1 rounded-lg text-[10px] font-serif tracking-widest border transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-full text-[10px] font-serif tracking-widest border transition-all cursor-pointer ${
               viewMode === 'constellation'
-                ? 'border-gold text-gold bg-gold/5 shadow-gold-glow animate-[pulse_3s_infinite] font-semibold'
+                ? 'border-gold/45 text-gold bg-gold/8 font-semibold'
                 : 'border-gold/10 text-gold-muted/50 hover:border-gold/25'
             }`}
           >
             星轨视图 ✦ Constellation
           </button>
+          </div>
         </div>
       )}
 
       {/* 列表主体 */}
-      <div className="flex-1 flex flex-col gap-4 mt-2">
+      <div className="flex-1 flex flex-col gap-3">
         {viewMode === 'list' ? (
           filteredEntries.length > 0 ? (
             filteredEntries.map((entry) => (
@@ -162,11 +167,11 @@ export default function JournalListTab({
             ))
           ) : (
             /* 空白状态 */
-            <div className="text-center py-12 border border-dashed border-gold/10 rounded-xl bg-card/25">
-              <p className="text-xs text-gold-muted/50 font-serif">✦ 镜中空无一物，期待您的第一篇倾听日记 ✦</p>
+            <div className="text-center py-12 border-y border-dashed border-gold/12">
+              <p className="text-xs text-gold-muted/50 font-serif">镜中暂时空无一物，期待第一篇倾听日记。</p>
               <Link
                 href="/"
-                className="mt-4 inline-block px-5 py-2 border border-gold/25 text-gold font-serif rounded-lg text-[10px] hover:bg-gold/5 transition-all"
+                className="mt-4 inline-block px-5 py-2 border border-gold/25 text-gold font-serif rounded-full text-[10px] hover:bg-gold/5 transition-all"
               >
                 开启塔罗探索
               </Link>

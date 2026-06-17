@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
+import AppPageShell from '@/components/layout/AppPageShell';
 import BottomNav from '@/components/layout/BottomNav';
 import { useJournalData } from '@/hooks/useJournalData';
-import JournalHeader from '@/components/journal/JournalHeader';
 import WeeklyCalendar from '@/components/journal/WeeklyCalendar';
 import JournalListTab from '@/components/journal/JournalListTab';
 
@@ -11,7 +11,6 @@ export default function JournalPage() {
   const {
     entries,
     filteredEntries,
-    checkins,
     checkInDays,
     showCheckInPicker,
     setShowCheckInPicker,
@@ -29,12 +28,14 @@ export default function JournalPage() {
   } = useJournalData();
 
   return (
-    <main className="flex-grow min-h-screen pb-28 flex flex-col items-center text-foreground relative overflow-y-auto select-none">
-      {/* 顶部 Header */}
-      <JournalHeader />
-
-      <div className="w-full max-w-md px-6 flex-1 flex flex-col gap-5 mt-6">
-        {/* 情绪周历打卡 */}
+    <AppPageShell
+      eyebrow="Journal"
+      title="轨迹"
+      description="把每一次抽牌、梦境和情绪打卡按时间收好，随时回看自己的变化。"
+      imageSrc="/cards/rws/20-judgement.jpg"
+      imageAlt="审判塔罗牌"
+    >
+      <div className="mt-7 flex flex-col gap-8">
         <WeeklyCalendar
           checkInDays={checkInDays}
           showCheckInPicker={showCheckInPicker}
@@ -42,7 +43,6 @@ export default function JournalPage() {
           onCheckIn={handleCheckIn}
         />
 
-        {/* 直接渲染日记/轨迹列表 */}
         <JournalListTab
           entries={entries}
           filteredEntries={filteredEntries}
@@ -60,6 +60,6 @@ export default function JournalPage() {
       </div>
 
       <BottomNav />
-    </main>
+    </AppPageShell>
   );
 }

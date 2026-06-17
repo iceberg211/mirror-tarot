@@ -32,9 +32,9 @@ export default function BackupSection({
   };
 
   return (
-    <div className="w-full mt-6 p-4 rounded-xl border border-gold/10 bg-[#0F1117]/30 flex flex-col gap-3.5 select-none">
-      <div className="border-b border-gold/5 pb-2 text-[10px] text-gold-muted/80 font-serif tracking-widest uppercase font-semibold">
-        ✦ 数据备份与恢复 (Data Backup & Restore)
+    <div className="w-full mt-4 border-y border-gold/10 py-4 flex flex-col gap-3.5 select-none">
+      <div className="text-[10px] text-gold-muted/80 font-serif tracking-widest uppercase font-semibold">
+        数据备份与恢复
       </div>
       <p className="text-[10px] text-gold-muted/65 leading-relaxed font-serif">
         由于目前不提供云端账号系统，您的情绪日记均保存在当前浏览器本地。建议定期备份您的日记数据，以防清理浏览器缓存造成日记丢失。
@@ -44,7 +44,7 @@ export default function BackupSection({
         <button
           type="button"
           onClick={onExport}
-          className="flex-1 py-2 px-3 rounded-lg border border-gold/20 bg-gold/5 hover:bg-gold/10 text-gold text-[10px] font-serif tracking-widest flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+          className="flex-1 py-2 px-3 rounded-full border border-gold/20 bg-gold/5 hover:bg-gold/10 text-gold text-[10px] font-serif tracking-widest flex items-center justify-center gap-1.5 cursor-pointer transition-all"
         >
           <Download className="w-3.5 h-3.5" />
           <span>导出日记备份</span>
@@ -53,7 +53,7 @@ export default function BackupSection({
         <button
           type="button"
           onClick={triggerFileInput}
-          className="flex-1 py-2 px-3 rounded-lg border border-gold/20 bg-gold/5 hover:bg-gold/10 text-gold text-[10px] font-serif tracking-widest flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+          className="flex-1 py-2 px-3 rounded-full border border-gold/20 bg-gold/5 hover:bg-gold/10 text-gold text-[10px] font-serif tracking-widest flex items-center justify-center gap-1.5 cursor-pointer transition-all"
         >
           <Upload className="w-3.5 h-3.5" />
           <span>导入备份恢复</span>

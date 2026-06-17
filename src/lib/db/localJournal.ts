@@ -50,9 +50,15 @@ interface CloudReadingRow {
   mood: string;
   spread_type: SpreadType;
   cards: SelectedCard[];
-  reading: ParsedReading;
+  reading: CloudReadingPayload;
   created_at: string;
   is_dream?: boolean;
+}
+
+interface CloudReadingPayload extends ParsedReading {
+  _chatHistory?: ChatMessage[];
+  _isStarred?: boolean;
+  _actionSeed?: ActionSeed;
 }
 
 interface CloudCheckInRow {
@@ -730,14 +736,12 @@ export async function syncJournalData(): Promise<boolean> {
     const readingsMap = new Map<string, JournalEntry>();
 
     cloudReadings.forEach((r) => {
-      const chatHistory = (r.reading as any)._chatHistory;
-      const isStarred = (r.reading as any)._isStarred;
-      const actionSeed = (r.reading as any)._actionSeed;
-
-      const cleanReading = { ...r.reading };
-      delete (cleanReading as any)._chatHistory;
-      delete (cleanReading as any)._isStarred;
-      delete (cleanReading as any)._actionSeed;
+      const {
+        _chatHistory: chatHistory,
+        _isStarred: isStarred,
+        _actionSeed: actionSeed,
+        ...cleanReading
+      } = r.reading;
 
       readingsMap.set(r.id, {
         id: r.id,

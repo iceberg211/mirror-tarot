@@ -391,7 +391,7 @@ export default function DailyReadingPage() {
 
                 <div className="text-center">
                   <span className="text-[9px] text-gold font-mono tracking-widest border border-gold/20 px-2 py-0.5 rounded-full uppercase">
-                    Today's Affirmation
+                    Today&apos;s Affirmation
                   </span>
                   <h3 className="text-sm font-serif text-gold-muted/80 tracking-widest mt-2.5">
                     今日镜面低语

@@ -22,7 +22,9 @@ create table if not exists public.readings (
       'relationship',
       'career',
       'shadow',
-      'choice'
+      'choice',
+      'mirror_cross',
+      'custom'
     )
   ),
   constraint readings_cards_is_array check (jsonb_typeof(cards) = 'array'),

@@ -27,22 +27,22 @@ export default function WeeklyCalendar({
   onCheckIn
 }: WeeklyCalendarProps) {
   return (
-    <div className="w-full p-4 rounded-2xl glassmorphism border-gold/25 shadow-gold-glow flex flex-col gap-3">
-      <div className="flex justify-between items-center border-b border-gold/10 pb-2 text-xs font-serif text-gold font-semibold tracking-widest">
+    <div className="w-full border-y border-gold/12 py-4 flex flex-col gap-4">
+      <div className="flex justify-between items-center text-xs font-serif text-gold font-semibold tracking-widest">
         <div className="flex items-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+          <Sparkles className="w-3.5 h-3.5" />
           <span>情绪周历打卡</span>
         </div>
         <span className="text-[10px] text-gold-muted/60 font-mono tracking-wider">7 DAYS</span>
       </div>
 
-      <div className="flex justify-between items-center pt-1">
+      <div className="flex justify-between items-center">
         {checkInDays.map((day) => {
           return (
             <div key={day.dateStr} className="flex flex-col items-center gap-1.5 flex-1">
               {day.checked ? (
                 // 已打卡状态
-                <div className="w-9 h-9 rounded-full bg-[#1E1C16] border border-gold text-gold font-serif text-xs font-semibold flex items-center justify-center shadow-gold-glow">
+                <div className="w-9 h-9 rounded-full bg-gold/8 border border-gold/45 text-gold font-serif text-xs font-semibold flex items-center justify-center">
                   {day.moodLabel}
                 </div>
               ) : day.isToday ? (
@@ -50,7 +50,7 @@ export default function WeeklyCalendar({
                 <button
                   type="button"
                   onClick={() => setShowCheckInPicker(true)}
-                  className="w-9 h-9 rounded-full border border-dashed border-gold/40 hover:border-gold bg-[#0E1017]/30 flex items-center justify-center text-gold/50 cursor-pointer animate-[pulse_2s_infinite] hover:bg-gold/5 outline-none"
+                  className="w-9 h-9 rounded-full border border-dashed border-gold/40 hover:border-gold bg-transparent flex items-center justify-center text-gold/55 cursor-pointer hover:bg-gold/5 outline-none transition-colors duration-300"
                 >
                   +
                 </button>

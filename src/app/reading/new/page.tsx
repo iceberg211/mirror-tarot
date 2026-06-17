@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,16 +22,24 @@ function ReadingNewContent() {
   const isDream = searchParams.get('isDream') === 'true';
 
   const customPosString = searchParams.get('customPositions') || '';
-  const customPositions = customPosString ? customPosString.split(',') : [];
+  const customPositions = useMemo(
+    () => customPosString
+      ? customPosString.split(',').map((position) => position.trim()).filter(Boolean)
+      : [],
+    [customPosString]
+  );
 
-  const spread = spreadType === 'custom'
-    ? {
-        type: 'custom' as SpreadType,
-        name: '自定义心智牌阵',
-        positions: customPositions.length > 0 ? customPositions : ['我的问题'],
-        description: '基于用户当前心智诉求，由用户自定义各维度解析方向的觉察牌阵。'
-      }
-    : getSpreadByType(spreadType);
+  const spread = useMemo(() => (
+    spreadType === 'custom'
+      ? {
+          type: 'custom' as SpreadType,
+          name: '自定义心智牌阵',
+          positions: customPositions.length > 0 ? customPositions : ['我的问题'],
+          description: '基于用户当前心智诉求，由用户自定义各维度解析方向的觉察牌阵。'
+        }
+      : getSpreadByType(spreadType)
+  ), [customPositions, spreadType]);
+  const positionCount = spread?.positions.length || 0;
   const moonPhase = getTodayMoonPhase();
 
   // 状态机步骤: 'draw' (抽牌中) | 'reveal' (点击翻开卡片)
@@ -75,8 +83,7 @@ function ReadingNewContent() {
             }
             if (parsed.revealedStates) {
               setRevealedStates(parsed.revealedStates);
-              const totalPositions = spread?.positions.length || 0;
-              const isAllRev = Object.keys(parsed.revealedStates).length === totalPositions && totalPositions > 0;
+              const isAllRev = Object.keys(parsed.revealedStates).length === positionCount && positionCount > 0;
               setAllRevealed(isAllRev);
             }
             if (parsed.step === 'draw' || parsed.step === 'reveal') {
@@ -93,7 +100,11 @@ function ReadingNewContent() {
     // 无缓存时，静默调用 draw API
     async function initDraw() {
       try {
-        const res = await fetch(`/api/reading/draw?spreadType=${spreadType}`);
+        const params = new URLSearchParams({ spreadType });
+        if (spreadType === 'custom' && customPosString) {
+          params.set('customPositions', customPosString);
+        }
+        const res = await fetch(`/api/reading/draw?${params.toString()}`);
         const data = await res.json();
         if (data.success) {
           setServerCards(data.cards);
@@ -103,7 +114,7 @@ function ReadingNewContent() {
       }
     }
     initDraw();
-  }, [spreadType, question, mood, spread]);
+  }, [spreadType, customPosString, question, mood, positionCount]);
 
   // 抽牌状态更新时：同步到 sessionStorage 缓存
   useEffect(() => {
@@ -123,7 +134,7 @@ function ReadingNewContent() {
     } catch (e) {
       console.error('Failed to save session to sessionStorage:', e);
     }
-  }, [question, mood, spreadType, serverCards, revealedStates, step]);
+  }, [question, mood, spreadType, customPosString, serverCards, revealedStates, step]);
 
   // 抽牌完毕回调
   const handleDrawComplete = () => {
@@ -137,7 +148,7 @@ function ReadingNewContent() {
     const newRevealed = { ...revealedStates, [index]: true };
     setRevealedStates(newRevealed);
 
-    if (Object.keys(newRevealed).length === (spread?.positions.length || 0)) {
+    if (Object.keys(newRevealed).length === positionCount) {
       setAllRevealed(true);
     }
   };

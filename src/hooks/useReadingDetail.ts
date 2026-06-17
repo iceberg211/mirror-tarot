@@ -12,7 +12,7 @@ import {
   updateChatHistory
 } from '@/lib/db/localJournal';
 import { useAudio } from '@/hooks/useAudio';
-import { SelectedCard, ParsedReading } from '@/lib/tarot/types';
+import { ParsedReading } from '@/lib/tarot/types';
 import { getCardElement, parseStreamingReading, defaultSuggestions } from '@/lib/tarot/utils';
 
 function isReadingEmpty(reading: ParsedReading): boolean {
@@ -110,7 +110,8 @@ export function useReadingDetail(id: string, trigger: boolean) {
         role: m.sender === 'user' ? ('user' as const) : ('assistant' as const),
         content: m.text
       }));
-      setChatMessages(mapped);
+      const timer = window.setTimeout(() => setChatMessages(mapped), 0);
+      return () => window.clearTimeout(timer);
     }
   }, [entry, chatMessages.length]);
 

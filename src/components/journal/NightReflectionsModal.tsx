@@ -2,8 +2,8 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Sparkles, Moon, Calendar, AlertCircle } from 'lucide-react';
-import { saveLocalReading, getLocalDateString } from '@/lib/db/localJournal';
+import { X, Sparkles, Moon, AlertCircle } from 'lucide-react';
+import { saveLocalReading } from '@/lib/db/localJournal';
 import { moodConfigs } from '@/lib/tarot/moods';
 
 interface NightReflectionsModalProps {
@@ -132,7 +132,7 @@ export default function NightReflectionsModal({ onClose, onSuccess }: NightRefle
                       key={mood.id}
                       type="button"
                       onClick={() => setSelectedMood(mood.id)}
-                      className={`px-3 py-1 rounded-full border text-[10px] font-serif tracking-wider whitespace-nowrap cursor-pointer transition-all duration-200 active:scale-95 outline-none`}
+                      className={`px-3 py-1 rounded-full border text-[10px] font-serif tracking-wider whitespace-nowrap cursor-pointer transition-all duration-200 active:scale-95 outline-none ${colorClasses}`}
                     >
                       <div className={`flex items-center gap-1 ${isSelected ? 'text-gold' : 'text-gold-muted/70'}`}>
                         <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-gold' : 'bg-gold-muted/40'}`} />

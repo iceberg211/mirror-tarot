@@ -21,11 +21,11 @@ export default function JournalListItem({ entry, privacyMode = false }: JournalL
   return (
     <Link
       href={`/reading/${entry.id}`}
-      className="w-full p-4 rounded-xl border border-gold/15 bg-[#0F1117]/60 hover:border-gold/30 hover:bg-[#12141D]/60 flex justify-between items-center gap-4 transition-all duration-300 group cursor-pointer"
+      className="w-full border-b border-gold/10 py-4 flex justify-between items-center gap-4 transition-all duration-300 group cursor-pointer hover:border-gold/24"
     >
       <div className="flex-1 flex flex-col gap-2 min-w-0">
         {/* 顶部元数据 */}
-        <div className="flex items-center gap-2 text-[9px] text-gold-muted/70 font-serif">
+        <div className="flex items-center gap-2 text-[9px] text-gold-muted/65 font-serif">
           <span className="flex items-center gap-1">
             <Calendar className="w-3.5 h-3.5 text-gold-muted/50" />
             {dateStr}
@@ -37,7 +37,7 @@ export default function JournalListItem({ entry, privacyMode = false }: JournalL
           {entry.isDream && (
             <>
               <span>•</span>
-              <span className="text-blue-400/90 font-medium px-1.5 py-0.5 rounded bg-blue-950/20 border border-blue-900/20 scale-95 font-sans">
+              <span className="text-blue-300/90 font-medium px-1.5 py-0.5 rounded-full bg-blue-950/15 border border-blue-900/20 scale-95 font-sans">
                 梦境 ✦ Dream
               </span>
             </>
@@ -45,14 +45,14 @@ export default function JournalListItem({ entry, privacyMode = false }: JournalL
         </div>
 
         {/* 问题摘要 */}
-        <h3 className={`text-xs md:text-sm text-foreground/90 font-serif leading-relaxed truncate transition-all duration-300 ${
+        <h3 className={`text-sm text-foreground/90 font-serif leading-relaxed truncate transition-all duration-300 ${
           privacyMode ? 'blur-[4.5px] select-none opacity-40 pointer-events-none' : ''
         }`}>
           {entry.question}
         </h3>
 
         {/* AI解读引言 */}
-        <p className={`text-[11px] text-gold-muted/75 font-serif italic line-clamp-1 transition-all duration-300 ${
+        <p className={`text-[11px] text-gold-muted/70 font-serif italic line-clamp-1 transition-all duration-300 ${
           privacyMode ? 'blur-[4.5px] select-none opacity-40 pointer-events-none' : ''
         }`}>
           {entry.reading.intuitiveSummary || '等待情绪解读激活中...'}
@@ -66,7 +66,7 @@ export default function JournalListItem({ entry, privacyMode = false }: JournalL
             <div
               key={card.id}
               style={{ zIndex: idx }}
-              className="w-7 h-11 rounded-sm border border-gold/35 overflow-hidden bg-[#090B11] flex items-center justify-center relative shadow-md"
+              className="w-7 h-11 rounded-sm border border-gold/25 overflow-hidden bg-[#090B11] flex items-center justify-center relative"
             >
               <div className="absolute inset-0.5 border border-gold/10 rounded-sm" />
               <span className="text-[8px] font-serif text-gold/35 scale-90">
