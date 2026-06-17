@@ -21,7 +21,17 @@ function ReadingNewContent() {
   const spreadType = (searchParams.get('spreadType') || 'three_cards') as SpreadType;
   const isDream = searchParams.get('isDream') === 'true';
 
-  const spread = getSpreadByType(spreadType);
+  const customPosString = searchParams.get('customPositions') || '';
+  const customPositions = customPosString ? customPosString.split(',') : [];
+
+  const spread = spreadType === 'custom'
+    ? {
+        type: 'custom' as SpreadType,
+        name: '自定义心智牌阵',
+        positions: customPositions.length > 0 ? customPositions : ['我的问题'],
+        description: '基于用户当前心智诉求，由用户自定义各维度解析方向的觉察牌阵。'
+      }
+    : getSpreadByType(spreadType);
   const moonPhase = getTodayMoonPhase();
 
   // 状态机步骤: 'draw' (抽牌中) | 'reveal' (点击翻开卡片)
@@ -55,7 +65,8 @@ function ReadingNewContent() {
         if (
           parsed.question === question &&
           parsed.mood === mood &&
-          parsed.spreadType === spreadType
+          parsed.spreadType === spreadType &&
+          (spreadType !== 'custom' || parsed.customPosString === customPosString)
         ) {
           // 异步触发以规避 react-hooks/set-state-in-effect 报错警告
           setTimeout(() => {
@@ -103,6 +114,7 @@ function ReadingNewContent() {
         question,
         mood,
         spreadType,
+        customPosString,
         serverCards,
         revealedStates,
         step,

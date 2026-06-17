@@ -36,6 +36,18 @@ export const spreads: Record<SpreadType, Spread> = {
     name: '二选一抉择',
     positions: ['现状', '选项A之影响', '选项B之影响', '建议与抉择'],
     description: '面临两难抉择（如工作、情感）时的明智之选。清晰对比两条不同道路的能量与结果。'
+  },
+  mirror_cross: {
+    type: 'mirror_cross',
+    name: '镜面十字',
+    positions: ['核心现状', '横向阻碍', '理智冠冕', '真实根基', '觉察出路'],
+    description: '通过十字几何阵列，层层剥离心智防线，探索现状背后的潜意识根基、现实阻碍与终极觉察出路。'
+  },
+  custom: {
+    type: 'custom',
+    name: '自定义心智牌阵',
+    positions: [],
+    description: '基于您当前独特心智诉求，自由定制抽牌数量与觉察解析维度的探索性牌阵。'
   }
 };
 

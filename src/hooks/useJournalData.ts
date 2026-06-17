@@ -17,6 +17,7 @@ import {
   syncJournalData
 } from '@/lib/db/localJournal';
 import { useAudio } from '@/hooks/useAudio';
+import { moodConfigs } from '@/lib/tarot/moods';
 
 export function useJournalData() {
   const [entries, setEntries] = useState<JournalEntry[]>(() => getLocalReadings());
@@ -38,6 +39,7 @@ export function useJournalData() {
   // 筛选状态
   const [selectedSpread, setSelectedSpread] = useState<string>('all');
   const [selectedMood, setSelectedMood] = useState<string>('all');
+  const [dreamOnly, setDreamOnly] = useState<boolean>(false);
 
   const refreshData = useCallback(() => {
     const readings = getLocalReadings();
@@ -86,8 +88,12 @@ export function useJournalData() {
       result = result.filter((e) => e.mood === selectedMood);
     }
 
+    if (dreamOnly) {
+      result = result.filter((e) => !!e.isDream);
+    }
+
     return result;
-  }, [selectedSpread, selectedMood, entries]);
+  }, [selectedSpread, selectedMood, dreamOnly, entries]);
 
   const handleCheckIn = (mood: string) => {
     saveLocalCheckIn(mood);
@@ -207,7 +213,9 @@ export function useJournalData() {
       
       const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
       const dayLabel = isToday ? '今' : dayNames[date.getDay()];
-      const moodLabel = checkIn?.mood ? checkIn.mood.charAt(0) : '';
+      
+      const moodConfig = moodConfigs.find((m) => m.name === checkIn?.mood);
+      const moodLabel = moodConfig ? moodConfig.label : (checkIn?.mood ? checkIn.mood.charAt(0) : '');
 
       return {
         dateStr,
@@ -237,6 +245,8 @@ export function useJournalData() {
     setSelectedSpread,
     selectedMood,
     setSelectedMood,
+    dreamOnly,
+    setDreamOnly,
     importStatus,
     setImportStatus,
     handleCheckIn,

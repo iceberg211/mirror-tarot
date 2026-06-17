@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:init": "node scripts/init-supabase.cjs",
+    "db:check": "node scripts/check-supabase.cjs",
+    "db:check:write": "node scripts/check-supabase.cjs --write"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.71",

@@ -2,11 +2,13 @@
 
 import React, { useRef } from 'react';
 import Link from 'next/link';
-import { Calendar, ChevronRight, Download, Upload } from 'lucide-react';
+import { Calendar, ChevronRight, Download, Upload, Moon } from 'lucide-react';
 import { spreads } from '@/lib/tarot/spreads';
 import { JournalEntry } from '@/lib/db/localJournal';
 
-const moodList = ['迷茫', '焦虑', '期待', '平静', '难过', '纠结'];
+import { moodConfigs } from '@/lib/tarot/moods';
+
+const moodList = moodConfigs.map((m) => m.name);
 
 interface JournalListTabProps {
   entries: JournalEntry[];
@@ -15,6 +17,8 @@ interface JournalListTabProps {
   setSelectedSpread: (spread: string) => void;
   selectedMood: string;
   setSelectedMood: (mood: string) => void;
+  dreamOnly: boolean;
+  setDreamOnly: (dreamOnly: boolean) => void;
   importStatus: { type: 'success' | 'error' | null; message: string };
   setImportStatus: (status: { type: 'success' | 'error' | null; message: string }) => void;
   onExport: () => void;
@@ -28,6 +32,8 @@ export default function JournalListTab({
   setSelectedSpread,
   selectedMood,
   setSelectedMood,
+  dreamOnly,
+  setDreamOnly,
   importStatus,
   setImportStatus,
   onExport,
@@ -52,7 +58,7 @@ export default function JournalListTab({
     <div className="w-full flex flex-col gap-4">
       {/* 筛选控制器 */}
       {entries.length > 0 && (
-        <div className="flex gap-3 bg-[#0E1017]/40 border border-gold/10 p-3 rounded-xl select-none">
+        <div className="flex gap-3 bg-[#0E1017]/40 border border-gold/10 p-3 rounded-xl select-none items-end">
           {/* 牌阵筛选 */}
           <div className="flex-1 flex flex-col gap-1">
             <span className="text-[9px] text-gold-muted/60 font-serif tracking-wider">按牌阵</span>
@@ -85,6 +91,23 @@ export default function JournalListTab({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* 梦境筛选 */}
+          <div className="flex flex-col gap-1 items-center justify-center pl-1.5 border-l border-gold/10 flex-shrink-0">
+            <span className="text-[9px] text-gold-muted/60 font-serif tracking-wider">梦境</span>
+            <button
+              type="button"
+              onClick={() => setDreamOnly(!dreamOnly)}
+              className={`w-9 h-7.5 rounded-lg border flex items-center justify-center cursor-pointer transition-all duration-300 ${
+                dreamOnly
+                  ? 'border-blue-400/80 bg-blue-950/20 text-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.25)]'
+                  : 'border-gold/15 bg-[#11131A] text-gold-muted/50 hover:border-gold/30 hover:text-gold'
+              }`}
+              title={dreamOnly ? '仅看梦境记录已开启' : '一键筛选梦境记录'}
+            >
+              <Moon className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}

@@ -17,7 +17,7 @@ const LOCAL_STORAGE_KEY = 'mirror_tarot_journal';
 const DEVICE_ID_KEY = 'mirror_tarot_device_id';
 const IMPORT_BACKUP_STORAGE_KEY = 'mirror_tarot_import_backup';
 const SUPPORTED_BACKUP_VERSION = '1.0';
-const spreadTypes: SpreadType[] = ['one_card', 'three_cards', 'relationship', 'career', 'shadow', 'choice'];
+const spreadTypes: SpreadType[] = ['one_card', 'three_cards', 'relationship', 'career', 'shadow', 'choice', 'mirror_cross', 'custom'];
 
 interface JournalBackupData {
   version: string;

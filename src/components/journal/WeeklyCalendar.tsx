@@ -4,7 +4,7 @@ import React from 'react';
 import { Sparkles, Heart, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const moodList = ['迷茫', '焦虑', '期待', '平静', '难过', '纠结'];
+import { moodConfigs } from '@/lib/tarot/moods';
 
 interface WeeklyCalendarProps {
   checkInDays: {
@@ -73,12 +73,12 @@ export default function WeeklyCalendar({
       {/* 情绪快速打卡弹窗 */}
       <AnimatePresence>
         {showCheckInPicker && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 select-none">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#05060A]/85 backdrop-blur-md p-4 select-none">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="relative w-full max-w-xs rounded-2xl border border-gold/25 bg-[#0F1118] p-5 shadow-gold-glow flex flex-col items-center gap-4 text-center"
+              className="relative w-full max-w-sm rounded-2xl border border-gold/25 bg-[#0F1118] p-5 shadow-gold-glow flex flex-col items-center gap-4 text-center"
             >
               <button
                 type="button"
@@ -97,17 +97,41 @@ export default function WeeklyCalendar({
                 <p className="text-[10px] text-gold-muted/60 font-serif">选择一个主导您此时情绪的标签</p>
               </div>
 
-              <div className="grid grid-cols-3 gap-3 w-full mt-2">
-                {moodList.map((mood) => (
-                  <button
-                    key={mood}
-                    type="button"
-                    onClick={() => onCheckIn(mood)}
-                    className="py-2.5 rounded-xl border border-gold/15 bg-[#0E1017]/55 hover:border-gold hover:text-gold text-xs font-serif text-gold-muted/80 tracking-widest cursor-pointer transition-all outline-none"
-                  >
-                    {mood}
-                  </button>
-                ))}
+              {/* 按分类渲染情绪标签 */}
+              <div className="w-full mt-2 flex flex-col gap-4.5 text-left max-h-[300px] overflow-y-auto no-scrollbar pr-1">
+                {(['light', 'shadow', 'storm'] as const).map((cat) => {
+                  const titleMap = {
+                    light: '光芒 ✦ Light (温和/喜悦)',
+                    shadow: '阴影 ✦ Shadow (低落/内耗)',
+                    storm: '风暴 ✦ Storm (冲突/紧绷)',
+                  };
+                  const colorMap = {
+                    light: 'text-amber-400/80 border-amber-500/10 bg-amber-950/5',
+                    shadow: 'text-blue-400/80 border-blue-500/10 bg-blue-950/5',
+                    storm: 'text-purple-400/80 border-purple-500/10 bg-purple-950/5',
+                  };
+                  const catMoods = moodConfigs.filter((m) => m.category === cat);
+                  return (
+                    <div key={cat} className="flex flex-col gap-2">
+                      <div className={`text-[9px] font-serif tracking-widest uppercase font-semibold py-0.5 px-2 rounded border ${colorMap[cat]} w-fit`}>
+                        {titleMap[cat]}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {catMoods.map((mood) => (
+                          <button
+                            key={mood.id}
+                            type="button"
+                            onClick={() => onCheckIn(mood.name)}
+                            className="py-2.5 px-2 rounded-xl border border-gold/10 bg-[#0E1017]/55 hover:border-gold/30 hover:bg-[#151821] text-xs font-serif text-gold-muted/80 cursor-pointer transition-all outline-none flex flex-col items-center justify-center gap-0.5 text-center group active:scale-95 duration-200"
+                          >
+                            <span className="font-semibold tracking-wider text-gold-muted group-hover:text-gold">{mood.name}</span>
+                            <span className="text-[8px] text-gold-muted/35 font-serif leading-none tracking-wide group-hover:text-gold-muted/50">{mood.description}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </motion.div>
           </div>

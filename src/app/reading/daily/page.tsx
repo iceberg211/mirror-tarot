@@ -8,15 +8,7 @@ import { useAudio } from '@/hooks/useAudio';
 import { saveLocalReading } from '@/lib/db/localJournal';
 import { SelectedCard, ParsedReading } from '@/lib/tarot/types';
 import TarotCard from '@/components/tarot/TarotCard';
-
-const moods = [
-  { id: 'confused', name: '迷茫', label: '迷' },
-  { id: 'anxious', name: '焦虑', label: '虑' },
-  { id: 'expectant', name: '期待', label: '期' },
-  { id: 'calm', name: '平静', label: '静' },
-  { id: 'sad', name: '难过', label: '难' },
-  { id: 'tangled', name: '纠结', label: '纠' },
-];
+import { moodConfigs } from '@/lib/tarot/moods';
 
 function parseStreamingReading(text: string, cardCount: number): ParsedReading {
   const sections = {
@@ -87,7 +79,7 @@ export default function DailyReadingPage() {
   const pressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const progressRef = useRef(0);
 
-  const moodName = moods.find((m) => m.id === selectedMood)?.name || '平静';
+  const moodName = moodConfigs.find((m) => m.id === selectedMood)?.name || '平静';
 
   // 1. 长按手势处理
   const handlePressStart = (e: React.PointerEvent) => {
@@ -282,22 +274,42 @@ export default function DailyReadingPage() {
               </div>
 
               {/* 情绪选择器 */}
-              <div className="w-full mb-10 flex flex-col gap-3 items-center">
-                <span className="text-[10px] text-gold-muted/70 font-serif tracking-widest uppercase">
-                  你此刻脑海中最清晰的情绪是？
-                </span>
-                <div className="flex gap-3 justify-center">
-                  {moods.map((mood) => {
+              <div className="w-full mb-8 flex flex-col gap-3 items-center">
+                <div className="flex flex-col items-center gap-1">
+                  <span className="text-[10px] text-gold-muted/70 font-serif tracking-widest uppercase">
+                    你此刻脑海中最清晰的情绪是？
+                  </span>
+                  {(() => {
+                    const active = moodConfigs.find((m) => m.id === selectedMood);
+                    if (!active) return null;
+                    const colorMap = {
+                      light: 'text-amber-400/80',
+                      shadow: 'text-blue-400/80',
+                      storm: 'text-purple-400/80'
+                    };
+                    return (
+                      <span className={`text-[9px] font-serif tracking-wide transition-colors duration-300 ${colorMap[active.category]}`}>
+                        {active.category === 'light' ? '光芒 ✦ ' :
+                         active.category === 'shadow' ? '阴影 ✦ ' : '风暴 ✦ '}{active.description}
+                      </span>
+                    );
+                  })()}
+                </div>
+                <div className="flex gap-2.5 overflow-x-auto no-scrollbar py-2 px-1 max-w-full justify-start md:justify-center">
+                  {moodConfigs.map((mood) => {
                     const isSelected = selectedMood === mood.id;
+                    const colorClasses = 
+                      mood.category === 'light' 
+                        ? (isSelected ? 'border-amber-400 text-amber-400 bg-amber-950/20 shadow-[0_0_10px_rgba(251,191,36,0.25)] scale-105' : 'border-gold/15 text-gold-muted/65 bg-[#0E1017]/35 hover:border-amber-400/35')
+                        : mood.category === 'shadow'
+                        ? (isSelected ? 'border-blue-400 text-blue-400 bg-blue-950/20 shadow-[0_0_10px_rgba(96,165,250,0.25)] scale-105' : 'border-gold/15 text-gold-muted/65 bg-[#0E1017]/35 hover:border-blue-400/35')
+                        : (isSelected ? 'border-purple-400 text-purple-400 bg-purple-950/20 shadow-[0_0_10px_rgba(192,132,252,0.25)] scale-105' : 'border-gold/15 text-gold-muted/65 bg-[#0E1017]/35 hover:border-purple-400/35');
+
                     return (
                       <button
                         key={mood.id}
                         onClick={() => setSelectedMood(mood.id)}
-                        className={`w-10 h-10 rounded-full border text-xs font-serif transition-all duration-300 cursor-pointer outline-none flex items-center justify-center ${
-                          isSelected
-                            ? 'border-gold text-gold bg-[#1F1E19]/70 shadow-gold-glow scale-105'
-                            : 'border-gold/15 text-gold-muted/65 bg-[#0E1017]/35 hover:border-gold/35'
-                        }`}
+                        className={`w-10 h-10 rounded-full border text-xs font-serif transition-all duration-300 cursor-pointer outline-none flex items-center justify-center flex-shrink-0 ${colorClasses}`}
                       >
                         {mood.label}
                       </button>
