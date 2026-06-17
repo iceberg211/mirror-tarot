@@ -5,9 +5,11 @@ import { Moon, Sparkles, Wind, Flame, Droplets, Mountain } from 'lucide-react';
 import BottomNav from '@/components/layout/BottomNav';
 import DreamJournalModal from '@/components/journal/DreamJournalModal';
 import BreathingZen from '@/components/tarot/BreathingZen';
+import NightReflectionsModal from '@/components/journal/NightReflectionsModal';
 
 export default function ZenPage() {
   const [showDreamModal, setShowDreamModal] = useState(false);
+  const [showNightModal, setShowNightModal] = useState(false);
   const [activeElement, setActiveElement] = useState<'water' | 'fire' | 'wind' | 'earth' | 'default' | null>(null);
 
   const elements = [
@@ -70,6 +72,35 @@ export default function ZenPage() {
           </button>
         </div>
 
+        {/* 晚间回顾入口大卡片 */}
+        <div className="w-full p-5 rounded-2xl border border-gold/15 bg-gradient-to-b from-[#0F1118]/80 via-[#16130E]/80 to-[#0F1118]/80 shadow-gold-glow flex flex-col gap-4 relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-gold/30 to-transparent" />
+          <div className="flex justify-between items-start">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[9px] text-gold font-mono tracking-widest border border-gold/25 px-2 py-0.5 rounded-full uppercase w-fit bg-gold/5">
+                Night Reflection
+              </span>
+              <h3 className="text-sm font-serif text-gold font-bold tracking-widest mt-1">
+                ✦ 30秒晚间回顾 ✦
+              </h3>
+              <p className="text-[10px] text-gold-muted/70 font-serif leading-relaxed tracking-wider mt-0.5 max-w-[280px]">
+                在睡前温柔地关照今日情绪、今日牌的显化，并留下给明天的寄语。30秒即可完成日记打卡沉淀。
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-gold/5 border border-gold/20 flex items-center justify-center text-gold">
+              <Sparkles className="w-5 h-5 animate-pulse" />
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowNightModal(true)}
+            className="w-full py-2.5 rounded-xl border border-gold/25 bg-gold/5 text-gold text-xs font-serif tracking-widest hover:bg-gold/10 transition-all cursor-pointer shadow-gold-glow text-center"
+          >
+            开启30秒晚间回顾 ➔
+          </button>
+        </div>
+
         {/* 呼吸禅修大模块 */}
         <div className="w-full p-5 rounded-2xl border border-gold/15 bg-[#0F1117]/60 shadow-gold-glow flex flex-col gap-4">
           <div className="flex justify-between items-center border-b border-gold/10 pb-2 text-[10px] text-gold font-serif font-bold tracking-widest uppercase">
@@ -118,6 +149,10 @@ export default function ZenPage() {
       {/* 弹窗逻辑 */}
       {showDreamModal && (
         <DreamJournalModal onClose={() => setShowDreamModal(false)} />
+      )}
+
+      {showNightModal && (
+        <NightReflectionsModal onClose={() => setShowNightModal(false)} />
       )}
 
       {activeElement && (

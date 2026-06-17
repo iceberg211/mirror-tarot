@@ -1,6 +1,19 @@
 import { SelectedCard, ParsedReading, SpreadType } from '../tarot/types';
 import { supabase } from '../supabaseClient';
 import { moodConfigs } from '../tarot/moods';
+import { getCardElement } from '../tarot/utils';
+
+export interface ChatMessage {
+  sender: 'user' | 'ai';
+  text: string;
+  timestamp: string;
+}
+
+export interface ActionSeed {
+  seedText: string;
+  status: 'completed' | 'failed' | 'dismissed' | 'pending';
+  date: string;
+}
 
 export interface JournalEntry {
   id: string;
@@ -11,7 +24,11 @@ export interface JournalEntry {
   reading: ParsedReading;
   createdAt: string;
   isDream?: boolean;
+  chatHistory?: ChatMessage[];
+  isStarred?: boolean;
+  actionSeed?: ActionSeed;
 }
+
 
 const LOCAL_STORAGE_KEY = 'mirror_tarot_journal';
 const DEVICE_ID_KEY = 'mirror_tarot_device_id';
@@ -154,6 +171,43 @@ export function getDeviceId(): string {
   return id || '';
 }
 
+export function extractActionSeed(actionAdvice: string): string {
+  if (!actionAdvice) return '';
+  const cleanText = actionAdvice.replace(/[#*`_-]/g, '').trim();
+  const match = cleanText.match(/[^。？！.?!]+[。？！.?!]?/);
+  const firstSentence = match ? match[0] : cleanText;
+  return firstSentence.length > 40 ? firstSentence.slice(0, 40) + '...' : firstSentence;
+}
+
+function saveAndSyncEntry(entry: JournalEntry, readings: JournalEntry[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(readings));
+  
+  const deviceId = getDeviceId();
+  if (deviceId && supabase) {
+    supabase.from('readings')
+      .upsert({
+        id: entry.id,
+        device_id: deviceId,
+        question: entry.question,
+        mood: entry.mood,
+        spread_type: entry.spreadType,
+        cards: entry.cards,
+        reading: {
+          ...entry.reading,
+          _chatHistory: entry.chatHistory,
+          _isStarred: entry.isStarred,
+          _actionSeed: entry.actionSeed,
+        },
+        created_at: entry.createdAt,
+        is_dream: entry.isDream || false
+      }, { onConflict: 'id' })
+      .then(({ error }) => {
+        if (error) console.error('Failed to sync entry to Supabase:', error);
+      });
+  }
+}
+
 export function saveLocalReading(
   question: string,
   mood: string,
@@ -165,6 +219,19 @@ export function saveLocalReading(
   if (typeof window === 'undefined') return '';
 
   const id = `local-${crypto.randomUUID()}`;
+  let actionSeed: ActionSeed | undefined = undefined;
+  
+  if (reading.actionAdvice) {
+    const seedText = extractActionSeed(reading.actionAdvice);
+    if (seedText) {
+      actionSeed = {
+        seedText,
+        status: 'pending',
+        date: getLocalDateString(),
+      };
+    }
+  }
+
   const newEntry: JournalEntry = {
     id,
     question,
@@ -174,35 +241,18 @@ export function saveLocalReading(
     reading,
     createdAt: new Date().toISOString(),
     isDream,
+    actionSeed,
   };
 
   try {
     const existing = getLocalReadings();
     const updated = [newEntry, ...existing];
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-
+    
     // 自动触发当日情绪打卡签到
     saveLocalCheckIn(mood);
-
-    // 后台异步云端同步
-    const deviceId = getDeviceId();
-    if (deviceId && supabase) {
-      supabase.from('readings')
-        .insert({
-          id,
-          device_id: deviceId,
-          question,
-          mood,
-          spread_type: spreadType,
-          cards,
-          reading,
-          created_at: newEntry.createdAt,
-          is_dream: isDream || false
-        })
-        .then(({ error }) => {
-          if (error) console.error('Failed to sync reading to Supabase:', error);
-        });
-    }
+    
+    // 同步到本地和云端
+    saveAndSyncEntry(newEntry, updated);
 
     return id;
   } catch (e) {
@@ -263,31 +313,99 @@ export function updateLocalReading(id: string, reading: ParsedReading): boolean 
     const index = readings.findIndex((r) => r.id === id);
     if (index === -1) return false;
 
-    readings[index] = {
-      ...readings[index],
-      reading,
-    };
-
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(readings));
-
-    // 后台异步云端同步
-    const deviceId = getDeviceId();
-    if (deviceId && supabase) {
-      supabase.from('readings')
-        .update({ reading })
-        .eq('id', id)
-        .eq('device_id', deviceId)
-        .then(({ error }) => {
-          if (error) console.error('Failed to update reading on Supabase:', error);
-        });
+    const existingEntry = readings[index];
+    let actionSeed = existingEntry.actionSeed;
+    
+    if (reading.actionAdvice && (!actionSeed || actionSeed.status === 'pending')) {
+      const seedText = extractActionSeed(reading.actionAdvice);
+      if (seedText && (!actionSeed || actionSeed.seedText !== seedText)) {
+        actionSeed = {
+          seedText,
+          status: 'pending',
+          date: getLocalDateString(new Date(existingEntry.createdAt)),
+        };
+      }
     }
 
+    readings[index] = {
+      ...existingEntry,
+      reading,
+      actionSeed,
+    };
+
+    saveAndSyncEntry(readings[index], readings);
     return true;
   } catch (e) {
     console.error('Failed to update reading in localStorage:', e);
     return false;
   }
 }
+
+export function toggleStarReading(id: string): boolean {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const readings = getLocalReadings();
+    const index = readings.findIndex((r) => r.id === id);
+    if (index === -1) return false;
+
+    const entry = readings[index];
+    entry.isStarred = !entry.isStarred;
+    
+    saveAndSyncEntry(entry, readings);
+    return true;
+  } catch (e) {
+    console.error('Failed to toggle star reading:', e);
+    return false;
+  }
+}
+
+export function updateActionSeedStatus(
+  id: string, 
+  status: 'completed' | 'failed' | 'dismissed' | 'pending'
+): boolean {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const readings = getLocalReadings();
+    const index = readings.findIndex((r) => r.id === id);
+    if (index === -1) return false;
+
+    const entry = readings[index];
+    if (entry.actionSeed) {
+      entry.actionSeed = {
+        ...entry.actionSeed,
+        status,
+      };
+      saveAndSyncEntry(entry, readings);
+      return true;
+    }
+    return false;
+  } catch (e) {
+    console.error('Failed to update action seed status:', e);
+    return false;
+  }
+}
+
+export function updateChatHistory(id: string, chatHistory: ChatMessage[]): boolean {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const readings = getLocalReadings();
+    const index = readings.findIndex((r) => r.id === id);
+    if (index === -1) return false;
+
+    const entry = readings[index];
+    entry.chatHistory = chatHistory;
+    
+    saveAndSyncEntry(entry, readings);
+    return true;
+  } catch (e) {
+    console.error('Failed to update chat history:', e);
+    return false;
+  }
+}
+
 
 // ==========================================
 // 情绪每日签到打卡 (Daily Check-in) 逻辑部分
@@ -421,20 +539,6 @@ export interface JournalAnalytics {
     image: string;
     description: string;
   } | null;
-}
-
-export function getCardElement(card: SelectedCard): 'water' | 'fire' | 'wind' | 'earth' {
-  if (card.arcana === 'minor' && card.suit) {
-    if (card.suit === 'wands') return 'fire';
-    if (card.suit === 'cups') return 'water';
-    if (card.suit === 'swords') return 'wind';
-    if (card.suit === 'pentacles') return 'earth';
-  }
-  const num = card.number ?? 0;
-  if ([2, 3, 12, 13, 18, 20].includes(num)) return 'water';
-  if ([1, 7, 10, 16, 19].includes(num)) return 'fire';
-  if ([0, 6, 11, 14, 17].includes(num)) return 'wind';
-  return 'earth';
 }
 
 export function getJournalAnalytics(
@@ -626,15 +730,27 @@ export async function syncJournalData(): Promise<boolean> {
     const readingsMap = new Map<string, JournalEntry>();
 
     cloudReadings.forEach((r) => {
+      const chatHistory = (r.reading as any)._chatHistory;
+      const isStarred = (r.reading as any)._isStarred;
+      const actionSeed = (r.reading as any)._actionSeed;
+
+      const cleanReading = { ...r.reading };
+      delete (cleanReading as any)._chatHistory;
+      delete (cleanReading as any)._isStarred;
+      delete (cleanReading as any)._actionSeed;
+
       readingsMap.set(r.id, {
         id: r.id,
         question: r.question,
         mood: r.mood,
         spreadType: r.spread_type as SpreadType,
         cards: r.cards,
-        reading: r.reading,
+        reading: cleanReading,
         createdAt: r.created_at,
         isDream: r.is_dream,
+        chatHistory,
+        isStarred,
+        actionSeed,
       });
     });
 
@@ -699,7 +815,12 @@ export async function syncJournalData(): Promise<boolean> {
         mood: r.mood,
         spread_type: r.spreadType,
         cards: r.cards,
-        reading: r.reading,
+        reading: {
+          ...r.reading,
+          _chatHistory: r.chatHistory,
+          _isStarred: r.isStarred,
+          _actionSeed: r.actionSeed,
+        },
         created_at: r.createdAt,
         is_dream: r.isDream || false,
       }));

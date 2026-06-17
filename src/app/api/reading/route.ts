@@ -1,5 +1,5 @@
 import { createQwenChatStream } from '@/lib/ai/qwen';
-import { buildReadingSystemPrompt, buildReadingUserPrompt } from '@/lib/ai/prompts';
+import { AI_PROMPT_VERSIONS, buildReadingSystemPrompt, buildReadingUserPrompt } from '@/lib/ai/prompts';
 import { getCardMeaning } from '@/lib/tarot/meanings';
 import { getSpreadByType } from '@/lib/tarot/spreads';
 import { SelectedCard } from '@/lib/tarot/types';
@@ -37,7 +37,11 @@ export async function POST(req: Request) {
     return await createQwenChatStream([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
-    ], 0.75);
+    ], {
+      temperature: 0.75,
+      requestName: 'reading',
+      promptVersion: AI_PROMPT_VERSIONS.reading,
+    });
 
   } catch (error) {
     console.error('API /api/reading Error:', error);

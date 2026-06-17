@@ -2,6 +2,8 @@
 
 import React from 'react';
 import { CheckInEntry, JournalAnalytics, JournalEntry } from '@/lib/db/localJournal';
+import { moodConfigs } from '@/lib/tarot/moods';
+import { CloudSun, CloudRain, CloudLightning, Sun, Cloud } from 'lucide-react';
 
 function parseMonthlyReport(text: string) {
   const sections = {
@@ -52,10 +54,126 @@ export default function AnalyticsTab({
   reportError,
   onGenerateReport
 }: AnalyticsTabProps) {
+  const mindWeather = React.useMemo(() => {
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const moodCounts = { light: 0, shadow: 0, storm: 0 };
+    let totalCount = 0;
+    
+    checkins.forEach((c) => {
+      const t = new Date(c.date).getTime();
+      if (t >= thirtyDaysAgo) {
+        const moodConfig = moodConfigs.find((m) => m.name === c.mood);
+        if (moodConfig) {
+          moodCounts[moodConfig.category]++;
+          totalCount++;
+        }
+      }
+    });
+    
+    entries.forEach((e) => {
+      const t = new Date(e.createdAt).getTime();
+      if (t >= thirtyDaysAgo) {
+        const moodConfig = moodConfigs.find((m) => m.name === e.mood);
+        if (moodConfig) {
+          moodCounts[moodConfig.category]++;
+          totalCount++;
+        }
+      }
+    });
+    
+    if (totalCount === 0) {
+      return {
+        title: '云迷雾锁 ✦ 数据积累中',
+        description: '潜意识数据积累中。在 300 天内打卡情绪或开启塔罗日记，即可揭示心灵天气图景。',
+        advice: '建议今日开启一次「每日镜面低语」或进行一次身心调息。',
+        themeColor: 'text-gold-muted/60',
+        bgGlow: 'rgba(201, 167, 106, 0.05)',
+        icon: Cloud
+      };
+    }
+    
+    const lightPct = (moodCounts.light / totalCount) * 100;
+    const shadowPct = (moodCounts.shadow / totalCount) * 100;
+    const stormPct = (moodCounts.storm / totalCount) * 100;
+    
+    let title = '';
+    let description = '';
+    let advice = '';
+    let themeColor = 'text-gold';
+    let bgGlow = 'rgba(201, 167, 106, 0.1)';
+    let icon = CloudSun;
+    
+    if (stormPct >= 40) {
+      title = '风暴聚顶 ✦ 情绪激荡';
+      description = `过去 30 天内，您的心灵天空被风暴元素占领（占比 ${Math.round(stormPct)}%）。这象征着近期心智中存在较强的执念、焦虑或愤怒情绪，心灵张力较大。`;
+      advice = '适宜减少重大脑力决策，配合进行「风元素·理性悬浮」调息冥想以给理智降温。';
+      themeColor = 'text-purple-400';
+      bgGlow = 'rgba(192, 132, 252, 0.15)';
+      icon = CloudLightning;
+    } else if (shadowPct >= 50) {
+      title = '微雨覆镜 ✦ 潜流漫过';
+      description = `过去 30 天内，您的心智多处于阴影与敏感区间（占比 ${Math.round(shadowPct)}%）。内心体验细腻深邃，但也伴随着微弱的倦怠感或消极沉溺。`;
+      advice = '适合在今日进行「自我与阴影」牌阵，亦可多通过「水元素·情绪净化」调息将抗拒转化为流动的自愈力。';
+      themeColor = 'text-blue-400';
+      bgGlow = 'rgba(96, 165, 250, 0.15)';
+      icon = CloudRain;
+    } else if (lightPct >= 50) {
+      title = '金光照临 ✦ 晴空万里';
+      description = `本月您的潜意识能量饱满明亮，光芒能量占比达 ${Math.round(lightPct)}%。内心秩序井然，行动力与直觉高涨。`;
+      advice = '此时正是以「火元素·直觉唤醒」借势而上的好时机，可以尝试挑战此前犹豫不决的事情。';
+      themeColor = 'text-amber-400';
+      bgGlow = 'rgba(251, 191, 36, 0.15)';
+      icon = Sun;
+    } else {
+      title = '薄雾破晓 ✦ 阴晴相宜';
+      description = `您的潜意识处于光芒（${Math.round(lightPct)}%）、阴影（${Math.round(shadowPct)}%）与风暴（${Math.round(stormPct)}%）的动态均衡之中。内心如雨后薄雾，理智与情感正在寻找平衡。`;
+      advice = '适宜进行「二选一抉择」牌阵，理清潜意识中的细微冲突，稳固当下重心。';
+      themeColor = 'text-gold';
+      bgGlow = 'rgba(201, 167, 106, 0.1)';
+      icon = CloudSun;
+    }
+    
+    return { title, description, advice, themeColor, bgGlow, icon };
+  }, [checkins, entries]);
+
   if (!analytics) return null;
 
   return (
     <div className="w-full flex flex-col gap-6 animate-fadeIn pb-12 mt-2">
+      {/* 本月心灵天气晴雨表 */}
+      {(() => {
+        const weather = mindWeather;
+        const WeatherIcon = weather.icon;
+        return (
+          <div
+            style={{
+              background: `radial-gradient(circle at 90% 10%, ${weather.bgGlow}, transparent 55%), #0F1117`
+            }}
+            className="w-full p-4.5 rounded-xl border border-gold/15 bg-[#0F1117]/60 flex gap-4 items-start shadow-gold-glow animate-fadeIn"
+          >
+            <div className={`w-12 h-12 rounded-full border border-gold/15 flex items-center justify-center flex-shrink-0 bg-card/40 ${weather.themeColor} shadow-gold-glow`}>
+              <WeatherIcon className="w-6 h-6 animate-[pulse_3s_infinite]" />
+            </div>
+            
+            <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+              <div className="flex justify-between items-center border-b border-gold/10 pb-1.5">
+                <span className={`text-xs font-serif font-bold tracking-widest ${weather.themeColor}`}>
+                  {weather.title}
+                </span>
+                <span className="text-[8px] text-gold-muted/50 font-mono tracking-widest uppercase">
+                  MIND WEATHER
+                </span>
+              </div>
+              <p className="text-[10px] text-foreground/85 font-serif leading-relaxed tracking-wide font-medium">
+                {weather.description}
+              </p>
+              <div className="text-[9px] text-gold-muted/80 font-serif leading-relaxed tracking-wider italic border-t border-gold/5 pt-1.5 mt-0.5">
+                <span className="text-gold not-italic font-bold">✦ 建议：</span>{weather.advice}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {/* 情绪波动图表 */}
       <div className="w-full p-4 rounded-xl border border-gold/15 bg-[#0F1117]/60 flex flex-col gap-3 shadow-gold-glow">
         <div className="flex justify-between items-center border-b border-gold/10 pb-2 text-[10px] text-gold font-serif font-bold tracking-widest uppercase">

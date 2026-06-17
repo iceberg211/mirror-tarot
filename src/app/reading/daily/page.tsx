@@ -9,55 +9,7 @@ import { saveLocalReading } from '@/lib/db/localJournal';
 import { SelectedCard, ParsedReading } from '@/lib/tarot/types';
 import TarotCard from '@/components/tarot/TarotCard';
 import { moodConfigs } from '@/lib/tarot/moods';
-
-function parseStreamingReading(text: string, cardCount: number): ParsedReading {
-  const sections = {
-    questionSummary: '',
-    intuitiveSummary: '',
-    contradiction: '',
-    overlookedFactor: '',
-    actionAdvice: '',
-    gentleReminder: '',
-  };
-  const cardReadings = Array(cardCount).fill('');
-
-  const parts = text.split('# ');
-  parts.forEach((part) => {
-    const lines = part.split('\n');
-    const title = lines[0].trim();
-    const body = lines.slice(1).join('\n').trim();
-
-    if (title.startsWith('SUMMARY')) {
-      sections.intuitiveSummary = body;
-      sections.questionSummary = body.slice(0, 15) + '...';
-    } else if (title.startsWith('CARD_READING_')) {
-      const idx = parseInt(title.replace('CARD_READING_', ''), 10) - 1;
-      if (idx >= 0 && idx < cardCount) {
-        cardReadings[idx] = body;
-      }
-    } else if (title.startsWith('CONTRADICTION')) {
-      sections.contradiction = body;
-    } else if (title.startsWith('OVERLOOKED_FACTOR')) {
-      sections.overlookedFactor = body;
-    } else if (title.startsWith('ACTION_ADVICE')) {
-      sections.actionAdvice = body;
-    } else if (title.startsWith('GENTLE_REMINDER')) {
-      sections.gentleReminder = body;
-    }
-  });
-
-  return {
-    ...sections,
-    cardReadings: cardReadings.map((body) => ({
-      positionName: '今日运势',
-      cardName: '',
-      cardZhName: '',
-      orientation: 'upright' as const,
-      interpretation: body,
-    })),
-    followUpSuggestions: [],
-  };
-}
+import { parseStreamingReading } from '@/lib/tarot/utils';
 
 export default function DailyReadingPage() {
   const router = useRouter();

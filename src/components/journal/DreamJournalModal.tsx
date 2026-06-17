@@ -20,6 +20,7 @@ export default function DreamJournalModal({ onClose }: DreamJournalModalProps) {
     dreamAnalysis: string;
     tarotMetaphor: string;
     questionForSubconscious: string;
+    dreamColors?: string[];
   } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,6 +46,7 @@ export default function DreamJournalModal({ onClose }: DreamJournalModalProps) {
         dreamAnalysis: data.dreamAnalysis,
         tarotMetaphor: data.tarotMetaphor,
         questionForSubconscious: data.questionForSubconscious,
+        dreamColors: data.dreamColors,
       });
     } catch (err) {
       console.error(err);
@@ -69,6 +71,16 @@ export default function DreamJournalModal({ onClose }: DreamJournalModalProps) {
     router.push(`/reading/new?${params.toString()}`);
   };
 
+  // 计算由 AI 提取情绪色渲染的云雾渐变背景
+  const backgroundStyle = analysisResult?.dreamColors && analysisResult.dreamColors.length >= 3
+    ? {
+        background: `radial-gradient(circle at 15% 20%, ${analysisResult.dreamColors[0]}2a, transparent 50%), 
+                     radial-gradient(circle at 85% 80%, ${analysisResult.dreamColors[1]}2a, transparent 50%), 
+                     radial-gradient(circle at 50% 50%, ${analysisResult.dreamColors[2]}1f, transparent 70%),
+                     linear-gradient(to bottom, #0F111A, #08090E)`
+      }
+    : {};
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05060A]/85 backdrop-blur-md">
       
@@ -77,7 +89,8 @@ export default function DreamJournalModal({ onClose }: DreamJournalModalProps) {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="w-full max-w-md bg-gradient-to-b from-[#0F111A] to-[#08090E] border border-gold/20 rounded-2xl p-6 shadow-gold-glow flex flex-col gap-5 relative overflow-hidden"
+        style={backgroundStyle}
+        className="w-full max-w-md border border-gold/20 rounded-2xl p-6 shadow-gold-glow flex flex-col gap-5 relative overflow-hidden transition-all duration-700 ease-out"
       >
         {/* 顶部饰条 */}
         <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-gold/30 to-transparent" />

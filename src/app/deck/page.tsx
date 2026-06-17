@@ -8,6 +8,7 @@ import { TarotCard as TarotCardType } from '@/lib/tarot/types';
 import TarotCard from '@/components/tarot/TarotCard';
 import BottomNav from '@/components/layout/BottomNav';
 import { getLocalReadings } from '@/lib/db/localJournal';
+import { spreads } from '@/lib/tarot/spreads';
 
 interface MeaningsModuleType {
   getCardMeaning: (cardId: string, orientation: 'upright' | 'reversed') => {
@@ -65,6 +66,55 @@ export default function DeckPage() {
     if (!selectedCard || !meaningsModule) return null;
     return meaningsModule.getCardMeaning(selectedCard.id, modalOrientation);
   }, [selectedCard, modalOrientation, meaningsModule]);
+
+  // 个人心智共鸣统计（P1 升级）
+  const personalStats = useMemo(() => {
+    if (!selectedCard) return null;
+    try {
+      const readings = getLocalReadings();
+      const cardReadings = readings.filter((r) =>
+        Array.isArray(r.cards) && r.cards.some((c) => c.id === selectedCard.id)
+      );
+      if (cardReadings.length === 0) return null;
+
+      const moodCounts: Record<string, number> = {};
+      const spreadCounts: Record<string, number> = {};
+
+      cardReadings.forEach((r) => {
+        moodCounts[r.mood] = (moodCounts[r.mood] || 0) + 1;
+        spreadCounts[r.spreadType] = (spreadCounts[r.spreadType] || 0) + 1;
+      });
+
+      let topMood = '';
+      let maxMoodCount = 0;
+      Object.entries(moodCounts).forEach(([mood, count]) => {
+        if (count > maxMoodCount) {
+          maxMoodCount = count;
+          topMood = mood;
+        }
+      });
+
+      let topSpread = '';
+      let maxSpreadCount = 0;
+      Object.entries(spreadCounts).forEach(([spread, count]) => {
+        if (count > maxSpreadCount) {
+          maxSpreadCount = count;
+          topSpread = spread;
+        }
+      });
+
+      const spreadName = spreads[topSpread as keyof typeof spreads]?.name || topSpread;
+
+      return {
+        count: cardReadings.length,
+        topMood,
+        topSpread: spreadName,
+      };
+    } catch (e) {
+      console.error('Failed to compute personal stats for card:', e);
+      return null;
+    }
+  }, [selectedCard]);
 
   // 点击开启 Modal 时触发异步 import()
   const handleOpenModal = async (card: TarotCardType) => {
@@ -355,6 +405,21 @@ export default function DeckPage() {
                         {cardMeaning.advice}
                       </p>
                     </div>
+                    
+                    {/* 5. 个人心智共鸣（P1 升级） */}
+                    {personalStats && (
+                      <div className="flex flex-col gap-2 p-3.5 rounded-xl border border-gold/20 bg-[#16130E]/60 shadow-[inset_0_0_8px_rgba(201,167,106,0.15)] mt-2">
+                        <span className="text-[10px] text-gold font-serif tracking-widest uppercase font-semibold flex items-center gap-1.5 border-b border-gold/10 pb-1.5">
+                          <Moon className="w-3 h-3 text-gold animate-pulse" />
+                          <span>个人心智共鸣 (Resonance)</span>
+                        </span>
+                        <p className="text-[10px] text-gold-muted/85 font-serif leading-relaxed tracking-wider mt-1">
+                          此牌已在您的情绪日记中累计被唤醒过 <strong className="text-gold font-bold">{personalStats.count}</strong> 次。
+                          当您抽中它时，您的内心大多处于 <strong className="text-gold font-bold">「{personalStats.topMood}」</strong> 的心境，
+                          并且最常在进行 <strong className="text-gold font-bold">「{personalStats.topSpread}」</strong> 觉察时遇到它。
+                        </p>
+                      </div>
+                    )}
                   </>
                 )}
               </div>

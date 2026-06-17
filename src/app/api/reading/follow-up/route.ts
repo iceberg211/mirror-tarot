@@ -1,5 +1,5 @@
 import { createQwenChatStream } from '@/lib/ai/qwen';
-import { buildFollowUpSystemPrompt, buildFollowUpUserPrompt } from '@/lib/ai/prompts';
+import { AI_PROMPT_VERSIONS, buildFollowUpSystemPrompt, buildFollowUpUserPrompt } from '@/lib/ai/prompts';
 
 export async function POST(req: Request) {
   try {
@@ -27,7 +27,11 @@ export async function POST(req: Request) {
     return await createQwenChatStream([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
-    ], 0.7);
+    ], {
+      temperature: 0.7,
+      requestName: 'follow-up',
+      promptVersion: AI_PROMPT_VERSIONS.followUp,
+    });
 
   } catch (error) {
     console.error('API /api/reading/follow-up Error:', error);

@@ -6,6 +6,52 @@ export interface AIConfig {
   modelName: string;
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+export interface AIRequestOptions {
+  temperature?: number;
+  timeoutMs?: number;
+  requestName?: string;
+  promptVersion?: string;
+}
+
+export interface AICompletionMeta {
+  requestId: string;
+  modelName: string;
+  promptVersion?: string;
+}
+
+export interface AIJsonCompletionResult<T> {
+  data: T;
+  rawContent: string;
+  meta: AICompletionMeta;
+}
+
+class AIRequestError extends Error {
+  constructor(
+    message: string,
+    public readonly requestId: string,
+    public readonly status?: number
+  ) {
+    super(message);
+    this.name = 'AIRequestError';
+  }
+}
+
+class AIResponseFormatError extends Error {
+  constructor(
+    message: string,
+    public readonly requestId: string,
+    public readonly rawContent: string
+  ) {
+    super(message);
+    this.name = 'AIResponseFormatError';
+  }
+}
+
 /**
  * 获取统一的大模型环境变量配置，防止路径双斜杠等错误
  */
@@ -19,6 +65,165 @@ export function getAIConfig(): AIConfig {
     baseURL,
     modelName,
   };
+}
+
+function assertAIConfig(): AIConfig {
+  const config = getAIConfig();
+
+  if (!config.apiKey) {
+    throw new Error('DASHSCOPE_API_KEY is not configured');
+  }
+
+  return config;
+}
+
+function getDefaultTimeoutMs(): number {
+  const raw = process.env.AI_REQUEST_TIMEOUT_MS;
+  const parsed = raw ? Number.parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 45_000;
+}
+
+function normalizeOptions(options?: number | AIRequestOptions): Required<AIRequestOptions> {
+  if (typeof options === 'number') {
+    return {
+      temperature: options,
+      timeoutMs: getDefaultTimeoutMs(),
+      requestName: 'qwen',
+      promptVersion: '',
+    };
+  }
+
+  return {
+    temperature: options?.temperature ?? 0.7,
+    timeoutMs: options?.timeoutMs ?? getDefaultTimeoutMs(),
+    requestName: options?.requestName ?? 'qwen',
+    promptVersion: options?.promptVersion ?? '',
+  };
+}
+
+function createAIRequestId(requestName: string): string {
+  const suffix = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  return `${requestName}-${suffix}`;
+}
+
+async function readErrorText(response: Response): Promise<string> {
+  try {
+    const text = await response.text();
+    return text.slice(0, 1200);
+  } catch {
+    return '无法读取模型错误响应';
+  }
+}
+
+function createTimeoutController(timeoutMs: number): {
+  signal: AbortSignal;
+  cleanup: () => void;
+} {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  return {
+    signal: controller.signal,
+    cleanup: () => clearTimeout(timer),
+  };
+}
+
+async function requestQwenChatCompletion(
+  messages: ChatMessage[],
+  options: Required<AIRequestOptions>,
+  stream: boolean
+): Promise<{
+  response: Response;
+  meta: AICompletionMeta;
+}> {
+  const { apiKey, baseURL, modelName } = assertAIConfig();
+  const requestId = createAIRequestId(options.requestName);
+  const { signal, cleanup } = createTimeoutController(options.timeoutMs);
+
+  try {
+    const response = await fetch(`${baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'X-Mirror-AI-Request-Id': requestId,
+      },
+      body: JSON.stringify({
+        model: modelName,
+        messages,
+        temperature: options.temperature,
+        stream,
+      }),
+      signal,
+    });
+
+    cleanup();
+
+    if (!response.ok) {
+      const errText = await readErrorText(response);
+      throw new AIRequestError(
+        `LLM Endpoint error (status ${response.status}): ${errText}`,
+        requestId,
+        response.status
+      );
+    }
+
+    return {
+      response,
+      meta: {
+        requestId,
+        modelName,
+        promptVersion: options.promptVersion || undefined,
+      },
+    };
+  } catch (error) {
+    cleanup();
+
+    if (error instanceof AIRequestError) {
+      throw error;
+    }
+
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new AIRequestError(
+        `LLM request timeout after ${options.timeoutMs}ms`,
+        requestId
+      );
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    throw new AIRequestError(message, requestId);
+  }
+}
+
+function extractAssistantContent(value: unknown): string {
+  if (!value || typeof value !== 'object') return '';
+
+  const root = value as {
+    choices?: {
+      message?: {
+        content?: unknown;
+      };
+    }[];
+  };
+
+  const content = root.choices?.[0]?.message?.content;
+  return typeof content === 'string' ? content : '';
+}
+
+function stripJsonMarkdown(content: string): string {
+  let cleanedContent = content.trim();
+
+  if (cleanedContent.startsWith('```')) {
+    cleanedContent = cleanedContent
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/```$/i, '')
+      .trim();
+  }
+
+  return cleanedContent;
 }
 
 /**
@@ -36,43 +241,15 @@ export function getQwenModel() {
   return provider(modelName);
 }
 
-export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
-
 /**
  * 集中管理大模型流式请求与自定义 SSE 纯文本转换器 ReadableStream
  */
 export async function createQwenChatStream(
   messages: ChatMessage[],
-  temperature = 0.7
+  optionsInput: number | AIRequestOptions = 0.7
 ): Promise<Response> {
-  const { apiKey, baseURL, modelName } = getAIConfig();
-
-  if (!apiKey) {
-    throw new Error('DASHSCOPE_API_KEY is not configured');
-  }
-
-  // 1. 发起原生的 HTTP 请求，强制开启 stream: true
-  const response = await fetch(`${baseURL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: modelName,
-      messages,
-      temperature,
-      stream: true,
-    }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`LLM Endpoint error (status ${response.status}): ${errText}`);
-  }
+  const options = normalizeOptions(optionsInput);
+  const { response, meta } = await requestQwenChatCompletion(messages, options, true);
 
   if (!response.body) {
     throw new Error('Empty response body from LLM');
@@ -127,6 +304,45 @@ export async function createQwenChatStream(
       'Content-Type': 'text/plain; charset=utf-8',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'X-Mirror-AI-Request-Id': meta.requestId,
+      'X-Mirror-AI-Model': meta.modelName,
+      ...(meta.promptVersion ? { 'X-Mirror-AI-Prompt-Version': meta.promptVersion } : {}),
     },
   });
+}
+
+/**
+ * 非流式 JSON 请求，适合梦境解析这类必须结构化返回的任务
+ */
+export async function createQwenJsonCompletion<T>(
+  messages: ChatMessage[],
+  optionsInput: AIRequestOptions & {
+    validate?: (value: unknown) => value is T;
+  } = {}
+): Promise<AIJsonCompletionResult<T>> {
+  const options = normalizeOptions(optionsInput);
+  const { response, meta } = await requestQwenChatCompletion(messages, options, false);
+  const payload: unknown = await response.json();
+  const rawContent = extractAssistantContent(payload);
+  const cleanedContent = stripJsonMarkdown(rawContent);
+
+  try {
+    const parsed: unknown = JSON.parse(cleanedContent);
+
+    if (optionsInput.validate && !optionsInput.validate(parsed)) {
+      throw new AIResponseFormatError('AI JSON 结构不符合预期', meta.requestId, cleanedContent);
+    }
+
+    return {
+      data: parsed as T,
+      rawContent: cleanedContent,
+      meta,
+    };
+  } catch (error) {
+    if (error instanceof AIResponseFormatError) {
+      throw error;
+    }
+
+    throw new AIResponseFormatError('AI 返回的数据不是合法 JSON', meta.requestId, cleanedContent);
+  }
 }
