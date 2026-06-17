@@ -1,6 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
+import { Moon } from 'lucide-react';
+import DreamJournalModal from '@/components/journal/DreamJournalModal';
 import BottomNav from '@/components/layout/BottomNav';
 import { useJournalData } from '@/hooks/useJournalData';
 import JournalHeader from '@/components/journal/JournalHeader';
@@ -34,6 +36,8 @@ export default function JournalPage() {
     handleImportData
   } = useJournalData();
 
+  const [showDreamModal, setShowDreamModal] = useState(false);
+
   return (
     <main className="flex-grow min-h-screen pb-28 flex flex-col items-center text-foreground relative overflow-y-auto select-none">
       {/* 顶部 Header */}
@@ -47,6 +51,18 @@ export default function JournalPage() {
           setShowCheckInPicker={setShowCheckInPicker}
           onCheckIn={handleCheckIn}
         />
+
+        {/* 梦境记录入口 */}
+        <div className="w-full flex justify-end -mt-2">
+          <button
+            type="button"
+            onClick={() => setShowDreamModal(true)}
+            className="px-4 py-2 rounded-lg border border-gold/25 bg-[#171510] text-[10px] text-gold font-serif tracking-widest hover:bg-gold/5 transition-all cursor-pointer shadow-gold-glow flex items-center gap-1.5"
+          >
+            <Moon className="w-3.5 h-3.5 animate-pulse" />
+            <span>✦ 记录昨晚梦境 ✦</span>
+          </button>
+        </div>
 
         {/* 页签 Tab 控制器 */}
         <div className="w-full grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[#0E1017]/40 border border-gold/10">
@@ -100,6 +116,10 @@ export default function JournalPage() {
           />
         )}
       </div>
+
+      {showDreamModal && (
+        <DreamJournalModal onClose={() => setShowDreamModal(false)} />
+      )}
 
       <BottomNav />
     </main>

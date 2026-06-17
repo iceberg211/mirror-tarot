@@ -24,6 +24,18 @@ export const spreads: Record<SpreadType, Spread> = {
     name: '职业牌阵',
     positions: ['潜在机会', '未知风险', '行动建议'],
     description: '适合求职、转行、创业或重大项目选择。多维度剖析你的事业走向，指明避坑路径与机会。'
+  },
+  shadow: {
+    type: 'shadow',
+    name: '自我与阴影',
+    positions: ['显意识自我', '潜意识暗影', '出路与觉察'],
+    description: '探索内心隐藏的潜意识冲动、抗拒与暗影，寻找自我觉察的和解与出路。'
+  },
+  choice: {
+    type: 'choice',
+    name: '二选一抉择',
+    positions: ['现状', '选项A之影响', '选项B之影响', '建议与抉择'],
+    description: '面临两难抉择（如工作、情感）时的明智之选。清晰对比两条不同道路的能量与结果。'
   }
 };
 

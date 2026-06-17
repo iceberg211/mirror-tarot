@@ -142,6 +142,130 @@ export default function AnalyticsTab({
         )}
       </div>
 
+      {/* 潜意识能量雷达 (NEW P1) */}
+      <div className="w-full p-4 rounded-xl border border-gold/15 bg-[#0F1117]/60 flex flex-col gap-3 shadow-gold-glow animate-fadeIn">
+        <div className="flex justify-between items-center border-b border-gold/10 pb-2 text-[10px] text-gold font-serif font-bold tracking-widest uppercase">
+          <span>潜意识能量雷达 ✦ Element Radar</span>
+          <span className="text-[8px] text-gold-muted/60 font-mono">30 DAYS Energy</span>
+        </div>
+
+        {(() => {
+          const props = analytics.elementProportions;
+          const total = props.water + props.fire + props.wind + props.earth;
+          if (total === 0) {
+            return (
+              <div className="h-44 flex items-center justify-center text-[10px] text-gold-muted/50 font-serif">
+                数据积累中，记录至少 1 篇情绪日记以绘制雷达图...
+              </div>
+            );
+          }
+
+          // 中心 cx=200, cy=130, maxR=80
+          const cx = 200;
+          const cy = 130;
+          const maxR = 80;
+
+          // 计算顶点
+          const py_water = cy - (props.water / 100) * maxR;
+          const px_fire  = cx + (props.fire / 100) * maxR;
+          const py_wind  = cy + (props.wind / 100) * maxR;
+          const px_earth = cx - (props.earth / 100) * maxR;
+
+          // 判定主导元素
+          const maxEntry = Object.entries(props).sort((a, b) => b[1] - a[1])[0];
+          const maxElement = maxEntry[0] as 'water' | 'fire' | 'wind' | 'earth';
+          
+          const adviceMap = {
+            water: '本月您的水元素（情绪/感知）比例偏高。这表明您情感体验细腻，但也更容易陷入情绪内耗或过度敏感，建议适时通过镜面冥想平复心流。',
+            fire: '本月您的火元素（行动/直觉）主导了心智。这意味着您当前行动力很强，渴望寻求突破；但需警惕浮躁与冲动，注意劳逸结合。',
+            wind: '本月您的风元素（心智/理性）比例过重。这往往意味着您正处于高强度的脑力决策或精神紧绷状态，容易过度思考，建议多落地感知当下。',
+            earth: '本月您的土元素（物质/现实）能量沉稳。这象征着您当前关注点集中在工作、生活秩序等现实基础；但注意提防因过度务实而显得沉闷。'
+          };
+
+          return (
+            <div className="flex flex-col gap-3">
+              <div className="relative">
+                <svg viewBox="0 0 400 250" className="w-full h-auto">
+                  <defs>
+                    <linearGradient id="radarGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--color-gold, #C9A76A)" stopOpacity="0.4" />
+                      <stop offset="100%" stopColor="var(--color-gold, #C9A76A)" stopOpacity="0.05" />
+                    </linearGradient>
+                  </defs>
+
+                  {/* 背景多边形环 (R = 26, 53, 80) */}
+                  {[26, 53, 80].map((r, idx) => (
+                    <polygon
+                      key={idx}
+                      points={`${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`}
+                      fill="none"
+                      stroke="rgba(201, 167, 106, 0.08)"
+                      strokeWidth="0.8"
+                    />
+                  ))}
+
+                  {/* 轴线 */}
+                  <line x1={cx} y1={cy - 85} x2={cx} y2={cy + 85} stroke="rgba(201, 167, 106, 0.08)" strokeWidth="0.8" />
+                  <line x1={cx - 100} y1={cy} x2={cx + 100} y2={cy} stroke="rgba(201, 167, 106, 0.08)" strokeWidth="0.8" />
+
+                  {/* 用户能量分布多边形 */}
+                  <polygon
+                    points={`${cx},${py_water} ${px_fire},${cy} ${cx},${py_wind} ${px_earth},${cy}`}
+                    fill="url(#radarGrad)"
+                    stroke="#C9A76A"
+                    strokeWidth="1.5"
+                    className="drop-shadow-[0_0_5px_rgba(201,167,106,0.3)]"
+                  />
+
+                  {/* 顶点控制圆点 */}
+                  <circle cx={cx} cy={py_water} r="3" className="fill-[#0F1117] stroke-gold stroke-[1.5]" />
+                  <circle cx={px_fire} cy={cy} r="3" className="fill-[#0F1117] stroke-gold stroke-[1.5]" />
+                  <circle cx={cx} cy={py_wind} r="3" className="fill-[#0F1117] stroke-gold stroke-[1.5]" />
+                  <circle cx={px_earth} cy={cy} r="3" className="fill-[#0F1117] stroke-gold stroke-[1.5]" />
+
+                  {/* 标签刻度文本 */}
+                  <text x={cx} y={cy - 90} className="fill-gold/90 font-serif text-[9px] text-center" textAnchor="middle">水 (情感/感知) {props.water}%</text>
+                  <text x={cx + 92} y={cy + 3} className="fill-gold/90 font-serif text-[9px] text-left" textAnchor="start">火 (行动/直觉) {props.fire}%</text>
+                  <text x={cx} y={cy + 96} className="fill-gold/90 font-serif text-[9px] text-center" textAnchor="middle">风 (理智/思想) {props.wind}%</text>
+                  <text x={cx - 92} y={cy + 3} className="fill-gold/90 font-serif text-[9px] text-right" textAnchor="end">土 (现实/物质) {props.earth}%</text>
+                </svg>
+              </div>
+
+              {/* 元素分析解说 */}
+              <p className="text-[10px] text-gold-muted/80 font-serif leading-relaxed tracking-wide px-2 border-t border-gold/5 pt-3">
+                <span className="text-gold font-semibold">✦ 潜意识状态解读：</span>
+                {adviceMap[maxElement]}
+              </p>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* 潜意识人格原型 (NEW P1) */}
+      {analytics.dominantArchetype && (
+        <div className="w-full p-4 rounded-xl border border-gold/15 bg-[#0F1117]/60 flex flex-col gap-3 shadow-gold-glow animate-fadeIn">
+          <div className="flex justify-between items-center border-b border-gold/10 pb-2 text-[10px] text-gold font-serif font-bold tracking-widest uppercase">
+            <span>潜意识人格原型 ✦ Subconscious Archetype</span>
+            <span className="text-[8px] text-gold-muted/60 font-mono">30 DAYS Archetype</span>
+          </div>
+
+          <div className="flex gap-4 items-center p-1">
+            <div className="w-14 h-24 rounded-lg overflow-hidden border border-gold/25 relative shadow-gold-glow flex-shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={analytics.dominantArchetype.image} alt={analytics.dominantArchetype.zhName} className="w-full h-full object-cover" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-serif text-gold font-semibold tracking-widest">
+                ✦ {analytics.dominantArchetype.zhName} ✦ {analytics.dominantArchetype.name.toUpperCase()}
+              </span>
+              <p className="text-[10px] text-foreground/80 font-serif leading-relaxed tracking-wide font-medium">
+                {analytics.dominantArchetype.description}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 高频潜意识卡牌 */}
       <div className="w-full p-4 rounded-xl border border-gold/15 bg-[#0F1117]/60 flex flex-col gap-3 shadow-gold-glow">
         <div className="flex justify-between items-center border-b border-gold/10 pb-2 text-[10px] text-gold font-serif font-bold tracking-widest uppercase">

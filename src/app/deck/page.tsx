@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Book, Search, X, Moon, Compass, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { tarotCards } from '@/lib/tarot/cards';
@@ -31,29 +31,7 @@ export default function DeckPage() {
   const [meaningsModule, setMeaningsModule] = useState<MeaningsModuleType | null>(null);
 
   // 用户历史抽卡次数统计
-  const [drawnStats, setDrawnStats] = useState<Record<string, number>>({});
-
-  // 挂载时异步统计用户历史抽卡次数
-  useEffect(() => {
-    // 异步延时加载以解决 React setState synchronous effect 规则警告
-    const timer = setTimeout(() => {
-      try {
-        const readings = getLocalReadings();
-        const stats: Record<string, number> = {};
-        readings.forEach((r) => {
-          if (Array.isArray(r.cards)) {
-            r.cards.forEach((c) => {
-              stats[c.id] = (stats[c.id] || 0) + 1;
-            });
-          }
-        });
-        setDrawnStats(stats);
-      } catch (e) {
-        console.error('Failed to calculate drawn stats:', e);
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
+  const [drawnStats] = useState<Record<string, number>>(() => getDrawnStats());
 
   // 筛选分类配置
   const filterTabs = [
@@ -388,4 +366,20 @@ export default function DeckPage() {
       <BottomNav />
     </main>
   );
+}
+
+function getDrawnStats(): Record<string, number> {
+  try {
+    const readings = getLocalReadings();
+    return readings.reduce<Record<string, number>>((stats, reading) => {
+      if (!Array.isArray(reading.cards)) return stats;
+      reading.cards.forEach((card) => {
+        stats[card.id] = (stats[card.id] || 0) + 1;
+      });
+      return stats;
+    }, {});
+  } catch (err) {
+    console.error('Failed to calculate drawn stats:', err);
+    return {};
+  }
 }

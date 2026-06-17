@@ -121,6 +121,7 @@ function ReadingDetailContent() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const generationAbortRef = useRef<AbortController | null>(null);
+  const hasAutoTriggeredRef = useRef(false);
 
   // 1. 加载数据并激活元素音效与云同步
   useEffect(() => {
@@ -196,6 +197,11 @@ function ReadingDetailContent() {
     setReadingError(null);
     playAmbient();
 
+    // 提前移除 URL 中的 trigger 参数，防止后续干扰
+    if (trigger) {
+      router.replace(`/reading/${entry.id}`, { scroll: false });
+    }
+
     try {
       const response = await fetch('/api/reading', {
         method: 'POST',
@@ -248,9 +254,6 @@ function ReadingDetailContent() {
       
       if (ok) {
         setEntry((prev) => (prev ? { ...prev, reading: finalReading } : null));
-        if (trigger) {
-          router.replace(`/reading/${entry.id}`, { scroll: false });
-        }
       } else {
         throw new Error('本地日记更新失败');
       }
@@ -283,17 +286,13 @@ function ReadingDetailContent() {
   useEffect(() => {
     if (!loading && entry) {
       const isEmpty = isReadingEmpty(entry.reading);
-      if ((trigger || isEmpty) && !generating && !readingText && !readingError) {
+      if ((trigger || isEmpty) && !generating && !readingText && !readingError && !hasAutoTriggeredRef.current) {
+        hasAutoTriggeredRef.current = true;
         const controller = new AbortController();
         generationAbortRef.current = controller;
         Promise.resolve().then(() => {
           handleRegenerate(controller.signal);
         });
-
-        return () => {
-          controller.abort();
-          generationAbortRef.current = null;
-        };
       }
     }
     return undefined;
@@ -651,7 +650,7 @@ function ReadingDetailContent() {
       )}
 
       {showZen && (
-        <BreathingZen onClose={() => setShowZen(false)} />
+        <BreathingZen element={activeElement} onClose={() => setShowZen(false)} />
       )}
 
       <BottomNav />

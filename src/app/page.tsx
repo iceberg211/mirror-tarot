@@ -112,6 +112,32 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* 每日镜面低语 (P0 极简正念仪式入口) */}
+      <div className="w-full max-w-md px-6 mb-1">
+        <button
+          type="button"
+          onClick={() => router.push('/reading/daily')}
+          className="w-full p-4.5 rounded-2xl border border-gold/25 bg-gradient-to-r from-[#171510] via-[#241F16] to-[#171510] flex items-center justify-between shadow-gold-glow hover:brightness-110 transition-all cursor-pointer"
+        >
+          <div className="flex items-center gap-3.5 text-left">
+            <div className="w-9 h-9 rounded-full bg-gold/5 border border-gold/20 flex items-center justify-center text-gold">
+              <Sparkles className="w-4.5 h-4.5 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-xs font-serif text-gold font-bold tracking-widest">
+                ✦ 每日镜面低语 ✦
+              </h3>
+              <p className="text-[9px] text-gold-muted/65 font-serif tracking-wider mt-0.5">
+                长按镜面 3秒，与今天的潜意识开启觉察共鸣
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] text-gold font-serif tracking-widest border border-gold/20 px-2.5 py-0.5 rounded-lg bg-gold/5">
+            开启
+          </span>
+        </button>
+      </div>
+
       {/* 2. 主表单域 */}
       <form onSubmit={handleStart} className="w-full max-w-md px-6 flex-1 flex flex-col justify-center gap-6 my-6">
         

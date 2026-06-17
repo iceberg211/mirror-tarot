@@ -116,6 +116,14 @@ export default function JournalListTab({
                     <span className="text-gold tracking-widest">{spreadInfo?.name}</span>
                     <span>•</span>
                     <span className="text-gold-muted">{entry.mood}</span>
+                    {entry.isDream && (
+                      <>
+                        <span>•</span>
+                        <span className="text-blue-400/90 font-medium px-1.5 py-0.5 rounded bg-blue-950/20 border border-blue-900/20 scale-95 font-sans">
+                          梦境 ✦ Dream
+                        </span>
+                      </>
+                    )}
                   </div>
 
                   {/* 问题摘要 */}

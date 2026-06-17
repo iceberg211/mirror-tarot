@@ -35,7 +35,7 @@ export interface Spread {
   description: string;
 }
 
-export type SpreadType = 'one_card' | 'three_cards' | 'relationship' | 'career';
+export type SpreadType = 'one_card' | 'three_cards' | 'relationship' | 'career' | 'shadow' | 'choice';
 
 export interface ParsedReading {
   questionSummary: string;

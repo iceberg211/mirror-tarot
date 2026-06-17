@@ -1,5 +1,6 @@
 import { SelectedCard, ParsedReading, SpreadType } from '../tarot/types';
 import { supabase } from '../supabaseClient';
+import { moodConfigs } from '../tarot/moods';
 
 export interface JournalEntry {
   id: string;
@@ -9,13 +10,14 @@ export interface JournalEntry {
   cards: SelectedCard[];
   reading: ParsedReading;
   createdAt: string;
+  isDream?: boolean;
 }
 
 const LOCAL_STORAGE_KEY = 'mirror_tarot_journal';
 const DEVICE_ID_KEY = 'mirror_tarot_device_id';
 const IMPORT_BACKUP_STORAGE_KEY = 'mirror_tarot_import_backup';
 const SUPPORTED_BACKUP_VERSION = '1.0';
-const spreadTypes: SpreadType[] = ['one_card', 'three_cards', 'relationship', 'career'];
+const spreadTypes: SpreadType[] = ['one_card', 'three_cards', 'relationship', 'career', 'shadow', 'choice'];
 
 interface JournalBackupData {
   version: string;
@@ -33,6 +35,7 @@ interface CloudReadingRow {
   cards: SelectedCard[];
   reading: ParsedReading;
   created_at: string;
+  is_dream?: boolean;
 }
 
 interface CloudCheckInRow {
@@ -156,7 +159,8 @@ export function saveLocalReading(
   mood: string,
   spreadType: SpreadType,
   cards: SelectedCard[],
-  reading: ParsedReading
+  reading: ParsedReading,
+  isDream?: boolean
 ): string {
   if (typeof window === 'undefined') return '';
 
@@ -169,6 +173,7 @@ export function saveLocalReading(
     cards,
     reading,
     createdAt: new Date().toISOString(),
+    isDream,
   };
 
   try {
@@ -191,7 +196,8 @@ export function saveLocalReading(
           spread_type: spreadType,
           cards,
           reading,
-          created_at: newEntry.createdAt
+          created_at: newEntry.createdAt,
+          is_dream: isDream || false
         })
         .then(({ error }) => {
           if (error) console.error('Failed to sync reading to Supabase:', error);
@@ -403,6 +409,32 @@ export interface JournalAnalytics {
     score: number;
     mood: string;
   }[];
+  elementProportions: {
+    water: number;
+    fire: number;
+    wind: number;
+    earth: number;
+  };
+  dominantArchetype?: {
+    zhName: string;
+    name: string;
+    image: string;
+    description: string;
+  } | null;
+}
+
+export function getCardElement(card: SelectedCard): 'water' | 'fire' | 'wind' | 'earth' {
+  if (card.arcana === 'minor' && card.suit) {
+    if (card.suit === 'wands') return 'fire';
+    if (card.suit === 'cups') return 'water';
+    if (card.suit === 'swords') return 'wind';
+    if (card.suit === 'pentacles') return 'earth';
+  }
+  const num = card.number ?? 0;
+  if ([2, 3, 12, 13, 18, 20].includes(num)) return 'water';
+  if ([1, 7, 10, 16, 19].includes(num)) return 'fire';
+  if ([0, 6, 11, 14, 17].includes(num)) return 'wind';
+  return 'earth';
 }
 
 export function getJournalAnalytics(
@@ -443,14 +475,10 @@ export function getJournalAnalytics(
     .slice(0, 3);
 
   // 2. 统计最近 15 次有记录（签到或日记）的情绪趋势
-  const moodScores: Record<string, number> = {
-    '平静': 4,
-    '期待': 4,
-    '纠结': 3,
-    '迷茫': 3,
-    '焦虑': 2,
-    '难过': 1,
-  };
+  const moodScores: Record<string, number> = {};
+  moodConfigs.forEach((m) => {
+    moodScores[m.name] = m.score;
+  });
 
   const dateMap: Record<string, { score: number; mood: string }> = {};
 
@@ -473,10 +501,55 @@ export function getJournalAnalytics(
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-15);
+
+  // 3. 计算近 30 天四大元素比例与大阿尔卡纳原型统计
+  const elementCounts = { water: 0, fire: 0, wind: 0, earth: 0 };
+  let totalCardsCount = 0;
+  const majorArcanaCounts: Record<string, { card: SelectedCard; count: number }> = {};
+
+  readings.forEach((entry) => {
+    const entryDate = new Date(entry.createdAt);
+    if (entryDate >= thirtyDaysAgo) {
+      entry.cards.forEach((card) => {
+        const el = getCardElement(card);
+        elementCounts[el] += 1;
+        totalCardsCount += 1;
+
+        if (card.arcana === 'major') {
+          if (!majorArcanaCounts[card.id]) {
+            majorArcanaCounts[card.id] = { card, count: 0 };
+          }
+          majorArcanaCounts[card.id].count += 1;
+        }
+      });
+    }
+  });
+
+  const elementProportions = { water: 25, fire: 25, wind: 25, earth: 25 };
+  if (totalCardsCount > 0) {
+    elementProportions.water = Math.round((elementCounts.water / totalCardsCount) * 100);
+    elementProportions.fire = Math.round((elementCounts.fire / totalCardsCount) * 100);
+    elementProportions.wind = Math.round((elementCounts.wind / totalCardsCount) * 100);
+    elementProportions.earth = Math.round((elementCounts.earth / totalCardsCount) * 100);
+  }
+
+  let dominantArchetype = null;
+  const sortedMajors = Object.values(majorArcanaCounts).sort((a, b) => b.count - a.count);
+  if (sortedMajors.length > 0) {
+    const bestMajor = sortedMajors[0].card;
+    dominantArchetype = {
+      zhName: bestMajor.zhName,
+      name: bestMajor.name,
+      image: bestMajor.image,
+      description: `本月您的心智投射常与「${bestMajor.zhName} (${bestMajor.name})」产生深刻共鸣（累计在近30天日记中出现过 ${sortedMajors[0].count} 次）。`
+    };
+  }
   
   return {
     topCards,
     moodTrend,
+    elementProportions,
+    dominantArchetype,
   };
 }
 
@@ -561,6 +634,7 @@ export async function syncJournalData(): Promise<boolean> {
         cards: r.cards,
         reading: r.reading,
         createdAt: r.created_at,
+        isDream: r.is_dream,
       });
     });
 
@@ -627,6 +701,7 @@ export async function syncJournalData(): Promise<boolean> {
         cards: r.cards,
         reading: r.reading,
         created_at: r.createdAt,
+        is_dream: r.isDream || false,
       }));
       pushPromises.push(Promise.resolve(supabase.from('readings').upsert(dbReadings)));
     }

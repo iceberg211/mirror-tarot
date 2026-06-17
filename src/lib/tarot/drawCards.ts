@@ -14,11 +14,11 @@ export function drawCards(spreadType: SpreadType): SelectedCard[] {
   }
 
   const count = spread.positions.length;
-  const shuffled = [...tarotCards].sort(() => 0.5 - Math.random());
+  const shuffled = shuffleCards(tarotCards);
   const selected = shuffled.slice(0, count);
 
   return selected.map((card, index) => {
-    const orientation = Math.random() > 0.5 ? 'upright' : 'reversed';
+    const orientation = randomInt(2) === 0 ? 'upright' : 'reversed';
     return {
       ...card,
       orientation,
@@ -26,4 +26,19 @@ export function drawCards(spreadType: SpreadType): SelectedCard[] {
       positionOrder: index + 1,
     };
   });
+}
+
+function shuffleCards(cards: typeof tarotCards) {
+  const shuffled = [...cards];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = randomInt(i + 1);
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+function randomInt(maxExclusive: number) {
+  const values = new Uint32Array(1);
+  crypto.getRandomValues(values);
+  return values[0] % maxExclusive;
 }

@@ -19,6 +19,7 @@ function ReadingNewContent() {
   const question = searchParams.get('question') || '';
   const mood = searchParams.get('mood') || '平静';
   const spreadType = (searchParams.get('spreadType') || 'three_cards') as SpreadType;
+  const isDream = searchParams.get('isDream') === 'true';
 
   const spread = getSpreadByType(spreadType);
   const moonPhase = getTodayMoonPhase();
@@ -165,7 +166,7 @@ function ReadingNewContent() {
       followUpSuggestions: defaultSuggestions,
     };
 
-    const journalId = saveLocalReading(question, mood, spreadType, serverCards, emptyReading);
+    const journalId = saveLocalReading(question, mood, spreadType, serverCards, emptyReading, isDream);
     if (journalId) {
       router.push(`/reading/${journalId}?trigger=true`);
     } else {
