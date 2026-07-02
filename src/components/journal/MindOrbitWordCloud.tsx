@@ -127,7 +127,7 @@ export default function MindOrbitWordCloud({ entries }: MindOrbitWordCloudProps)
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.1 }}
-      className="w-full rounded-2xl border border-gold/15 bg-gradient-to-b from-[#0C0F16]/50 to-[#05060A]/85 p-5 shadow-gold-glow flex flex-col gap-4 relative overflow-hidden select-none"
+      className="w-full rounded-2xl border border-gold/15 bg-gradient-to-b from-card/60 to-card/90 p-5 shadow-gold-glow flex flex-col gap-4 relative overflow-hidden select-none transition-all duration-400"
     >
       <div className="flex flex-col gap-0.5">
         <span className="text-[9px] font-mono text-gold-muted/50 uppercase tracking-[0.2em]">
@@ -139,7 +139,7 @@ export default function MindOrbitWordCloud({ entries }: MindOrbitWordCloudProps)
       </div>
 
       {/* 词云星空球体 */}
-      <div className="relative w-full aspect-square max-h-[220px] rounded-xl border border-gold/5 bg-[#04060A] overflow-hidden flex items-center justify-center mt-2">
+      <div className="relative w-full aspect-square max-h-[220px] rounded-xl border border-gold/5 bg-card/45 overflow-hidden flex items-center justify-center mt-2 transition-colors duration-400">
         {/* 中心微弱渐变光晕 */}
         <div className="absolute w-24 h-24 rounded-full bg-gold/10 blur-xl pointer-events-none" />
         

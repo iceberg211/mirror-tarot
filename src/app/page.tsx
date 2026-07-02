@@ -7,13 +7,19 @@ import HomeHero from '@/components/home/HomeHero';
 import HomeInquiryForm from '@/components/home/HomeInquiryForm';
 import HomeMoonModal from '@/components/home/HomeMoonModal';
 import { useHomeReadingFlow } from '@/hooks/useHomeReadingFlow';
+import { useTheme } from '@/components/theme/ThemeProvider';
 
 export default function HomePage() {
   const flow = useHomeReadingFlow();
+  const { theme } = useTheme();
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-y-auto bg-[#05060A] pb-24 text-foreground">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(201,167,106,0.10),transparent_35%),linear-gradient(180deg,rgba(7,9,15,0.15),rgba(5,6,10,0.96)_62%)]" />
+    <main className="relative flex min-h-screen flex-col overflow-y-auto bg-background pb-24 text-foreground transition-colors duration-400">
+      <div className={`pointer-events-none fixed inset-0 transition-all duration-400 ${
+        theme === 'dark'
+          ? 'bg-[radial-gradient(circle_at_50%_0%,rgba(201,167,106,0.10),transparent_35%),linear-gradient(180deg,rgba(7,9,15,0.15),rgba(5,6,10,0.96)_62%)]'
+          : 'bg-[radial-gradient(circle_at_50%_0%,rgba(201,167,106,0.06),transparent_35%)]'
+      }`} />
 
       <div className="relative z-10">
         {flow.activeSection === 'overview' ? (

@@ -157,7 +157,7 @@ export default function AnalyticsTab({
             }}
             className="w-full border-y border-gold/12 py-5 flex gap-4 items-start animate-fadeIn"
           >
-            <div className={`w-12 h-12 rounded-full border border-gold/15 flex items-center justify-center flex-shrink-0 bg-[#0B0D13]/65 ${weather.themeColor}`}>
+            <div className={`w-12 h-12 rounded-full border border-gold/15 flex items-center justify-center flex-shrink-0 bg-card ${weather.themeColor}`}>
               <WeatherIcon className="w-6 h-6 animate-[pulse_3s_infinite]" />
             </div>
             
@@ -464,7 +464,7 @@ export default function AnalyticsTab({
             const rpt = parseMonthlyReport(monthlyReport);
             return (
               <div className="flex flex-col gap-5 text-foreground/95 select-text">
-                <div className="relative p-4 rounded-xl bg-[#1E1C16]/40 border border-gold/15 italic text-center text-xs font-serif leading-relaxed text-gold/90">
+                <div className="relative p-4 rounded-xl bg-gold/10 border border-gold/15 italic text-center text-xs font-serif leading-relaxed text-gold/90">
                   “ {rpt.summary} ”
                 </div>
 

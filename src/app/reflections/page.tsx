@@ -58,7 +58,7 @@ export default function ReflectionsPage() {
             />
           </>
         ) : (
-          <div className="flex flex-col gap-5 rounded-2xl border border-gold/15 bg-[#0F1117]/60 p-6 text-center select-none shadow-gold-glow">
+          <div className="flex flex-col gap-5 rounded-2xl border border-gold/15 bg-card p-6 text-center select-none shadow-gold-glow">
             <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-gold/20 bg-gold/5 text-gold animate-[pulse_3s_infinite]">
               <Sparkles className="h-4.5 w-4.5" />
             </div>

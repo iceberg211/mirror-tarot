@@ -38,7 +38,7 @@ export default function HomeActionPanel({
         <button
           type="button"
           onClick={onDailyDraw}
-          className="min-h-[66px] rounded-xl border border-gold/14 bg-[#0E1017]/45 px-3.5 py-2 text-left transition-all duration-300 hover:border-gold/35 hover:bg-gold/6 cursor-pointer flex flex-col justify-center"
+          className="min-h-[66px] rounded-xl border border-gold/14 bg-card px-3.5 py-2 text-left transition-all duration-300 hover:border-gold/35 hover:bg-gold/5 cursor-pointer flex flex-col justify-center shadow-gold-glow"
         >
           <span className="flex items-center gap-2 text-xs font-serif font-semibold tracking-widest text-foreground/88">
             <Sparkles className="h-4 w-4 text-gold/78" />
@@ -52,7 +52,7 @@ export default function HomeActionPanel({
         <button
           type="button"
           onClick={onOpenDream}
-          className="min-h-[66px] rounded-xl border border-gold/14 bg-[#0E1017]/45 px-3.5 py-2 text-left transition-all duration-300 hover:border-gold/35 hover:bg-gold/6 cursor-pointer flex flex-col justify-center"
+          className="min-h-[66px] rounded-xl border border-gold/14 bg-card px-3.5 py-2 text-left transition-all duration-300 hover:border-gold/35 hover:bg-gold/5 cursor-pointer flex flex-col justify-center shadow-gold-glow"
         >
           <span className="flex items-center gap-2 text-xs font-serif font-semibold tracking-widest text-foreground/88">
             <Moon className="h-4 w-4 text-gold/78" />

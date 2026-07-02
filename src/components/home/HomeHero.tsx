@@ -9,6 +9,7 @@ import { MoonPhaseInfo, getMoonSvgPath } from '@/lib/tarot/moonPhase';
 import { JournalEntry } from '@/lib/db/localJournal';
 import { useAuth } from '@/hooks/useAuth';
 import HomeActionPanel from '@/components/home/HomeActionPanel';
+import { useTheme } from '@/components/theme/ThemeProvider';
 
 interface HomeHeroProps {
   moonPhase: MoonPhaseInfo;
@@ -50,9 +51,48 @@ export default function HomeHero({
 }: HomeHeroProps) {
   const router = useRouter();
   const { status } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+
+  // 星宿粒子配置
+  const particles = [
+    { id: 1, top: '6%', left: '12%', size: 2.5, delay: 0.5, duration: 4.5 },
+    { id: 2, top: '14%', left: '84%', size: 3.5, delay: 1.2, duration: 5.5 },
+    { id: 3, top: '22%', left: '48%', size: 2, delay: 0.2, duration: 3.8 },
+    { id: 4, top: '35%', left: '8%', size: 2.5, delay: 1.8, duration: 6.2 },
+    { id: 5, top: '44%', left: '92%', size: 2, delay: 0.9, duration: 4.8 },
+    { id: 6, top: '52%', left: '26%', size: 3, delay: 2.5, duration: 5.2 },
+  ];
 
   return (
-    <section className="relative w-full overflow-hidden px-6 pt-6 pb-28">
+    <section className="relative w-full overflow-hidden px-6 pt-6 pb-28 transition-colors duration-400 bg-background">
+      {/* 星宿背景粒子层 */}
+      {particles.map((p) => (
+        <motion.div
+          key={p.id}
+          style={{
+            position: 'absolute',
+            top: p.top,
+            left: p.left,
+            width: p.size,
+            height: p.size,
+            borderRadius: '50%',
+            backgroundColor: 'var(--gold)',
+            boxShadow: '0 0 6px var(--gold)',
+          }}
+          animate={{
+            opacity: [0.12, 0.75, 0.12],
+            scale: [0.8, 1.25, 0.8],
+            y: [0, -4, 0]
+          }}
+          transition={{
+            duration: p.duration,
+            repeat: Infinity,
+            ease: 'easeInOut',
+            delay: p.delay,
+          }}
+          className="pointer-events-none z-0"
+        />
+      ))}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[430px] bg-[radial-gradient(circle_at_50%_12%,rgba(201,167,106,0.18),transparent_34%),radial-gradient(circle_at_18%_35%,rgba(71,85,105,0.22),transparent_34%)]" />
 
       <div className="relative z-10 mx-auto flex w-full max-w-md flex-col">
@@ -63,8 +103,20 @@ export default function HomeHero({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={toggleTheme}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-gold/15 bg-gold/5 text-gold shadow-gold-glow transition-all duration-300 hover:border-gold/35"
+              aria-label={theme === 'dark' ? '切换亮色' : '切换暗色'}
+            >
+              {theme === 'dark' ? (
+                <span className="text-[12px] leading-none">☀</span>
+              ) : (
+                <span className="text-[12px] leading-none">☾</span>
+              )}
+            </button>
+            <button
+              type="button"
               onClick={() => router.push('/deck')}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-gold/15 bg-[#0F1117]/45 text-gold/85 shadow-gold-glow transition-all duration-300 hover:border-gold/35"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-gold/15 bg-gold/5 text-gold shadow-gold-glow transition-all duration-300 hover:border-gold/35"
               aria-label="查阅牌义字典"
             >
               <BookOpen className="h-4 w-4" />
@@ -75,7 +127,7 @@ export default function HomeHero({
               className={`flex h-9 w-9 items-center justify-center rounded-full border transition-all duration-300 ${
                 status === 'authenticated'
                   ? 'border-gold/40 bg-gold/10 text-gold'
-                  : 'border-gold/15 bg-[#0F1117]/45 text-gold/80 hover:border-gold/35'
+                  : 'border-gold/15 bg-gold/5 text-gold hover:border-gold/35'
               }`}
               aria-label="账号"
             >
@@ -91,9 +143,9 @@ export default function HomeHero({
           className="mt-7"
         >
           <p className="text-[11px] font-serif tracking-[0.22em] text-gold-muted/80">
-            把问题说清楚一点
+            ✦ 镜中折射潜意识，照亮真实的自我 ✦
           </p>
-          <h1 className="mt-3 text-[44px] font-serif font-semibold leading-[0.95] tracking-normal text-gold drop-shadow-[0_0_18px_rgba(201,167,106,0.28)]">
+          <h1 className="mt-3 text-[44px] font-serif font-semibold leading-[0.95] tracking-normal bg-gradient-to-r from-gold via-gold-focus to-gold bg-clip-text text-transparent drop-shadow-[0_0_18px_rgba(201,167,106,0.25)]">
             Mirror
             <br />
             Tarot
@@ -116,18 +168,36 @@ export default function HomeHero({
           className="relative mt-5 h-[152px]"
         >
           <div className="absolute left-1/2 top-4 h-32 w-32 -translate-x-1/2 rounded-full border border-gold/10 bg-[radial-gradient(circle,rgba(201,167,106,0.1),transparent_68%)] blur-[1px]" />
-          {heroCards.map((card) => (
-            <Image
-              key={card.src}
-              src={card.src}
-              alt={card.alt}
-              width={82}
-              height={138}
-              priority={card.priority}
-              sizes="82px"
-              className={`absolute rounded-[9px] border border-gold/15 object-cover shadow-[0_18px_46px_rgba(0,0,0,0.5)] ${card.className}`}
-            />
-          ))}
+          {heroCards.map((card, index) => {
+            const yOffset = index === 1 ? [-3, 3, -3] : index === 0 ? [-5, 1, -5] : [1, -5, 1];
+            const rotateOffset = index === 1 ? [2, 3, 2] : index === 0 ? [-12, -10, -12] : [12, 10, 12];
+            return (
+              <motion.div
+                key={card.src}
+                animate={{
+                  y: yOffset,
+                  rotate: rotateOffset,
+                }}
+                transition={{
+                  duration: 5 + index * 0.5,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                }}
+                className={`absolute rounded-[9px] border border-gold/15 shadow-[0_18px_46px_rgba(0,0,0,0.5)] overflow-hidden ${card.className}`}
+                style={{ width: 82, height: 138 }}
+              >
+                <Image
+                  src={card.src}
+                  alt={card.alt}
+                  fill
+                  priority={card.priority}
+                  sizes="82px"
+                  className="rounded-[9px] object-cover transition-transform duration-700 hover:scale-105"
+                />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-background/30 via-transparent to-transparent rounded-[9px]" />
+              </motion.div>
+            );
+          })}
           <div className="absolute bottom-0 left-1/2 h-px w-[78%] -translate-x-1/2 bg-gradient-to-r from-transparent via-gold/35 to-transparent" />
         </motion.div>
 
@@ -138,7 +208,7 @@ export default function HomeHero({
           className="mt-2 grid grid-cols-[1fr_auto] items-end gap-4 border-y border-gold/10 py-4"
         >
           <div className="flex items-start gap-3">
-            <div className="relative mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gold/15 bg-[#0E1017]/65">
+            <div className="relative mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-gold/15 bg-gold/5">
               <svg viewBox="0 0 100 100" className="h-6 w-6 text-gold/85 drop-shadow-[0_0_8px_rgba(201,167,106,0.45)]">
                 <circle cx="50" cy="50" r="38" className="fill-[#1A1F30]/45 stroke-none" />
                 <path d={getMoonSvgPath(moonPhase.iconType, moonPhase.percent)} className="fill-gold stroke-none" />
@@ -173,7 +243,7 @@ export default function HomeHero({
             transition={{ duration: 0.5, delay: 0.3 }}
             type="button"
             onClick={() => router.push(`/reading/${latestEntry.id}`)}
-            className="mt-4 grid min-h-[58px] w-full grid-cols-[auto_1fr_auto] items-center gap-3.5 rounded-xl border border-gold/10 bg-[#0E1017]/25 p-3.5 text-left transition-all duration-300 hover:border-gold/30 hover:bg-[#0E1017]/45 cursor-pointer"
+            className="mt-4 grid min-h-[58px] w-full grid-cols-[auto_1fr_auto] items-center gap-3.5 rounded-xl border border-gold/10 bg-gold/5 p-3.5 text-left transition-all duration-300 hover:border-gold/30 hover:bg-gold/10 cursor-pointer shadow-gold-glow"
           >
             <span className="flex h-8 w-8 items-center justify-center rounded-full border border-gold/14 text-gold/80">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>

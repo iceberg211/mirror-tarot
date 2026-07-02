@@ -188,7 +188,7 @@ export default function JungianArchetypeCard({ entries }: JungianArchetypeCardPr
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="w-full rounded-2xl border border-gold/22 bg-gradient-to-b from-[#14120E]/70 to-[#0A0B0F]/90 p-5 shadow-gold-glow flex flex-col gap-4 relative overflow-hidden select-none"
+      className="w-full rounded-2xl border border-gold/22 bg-gradient-to-b from-card/80 to-card/95 p-5 shadow-gold-glow flex flex-col gap-4 relative overflow-hidden select-none transition-all duration-400"
     >
       <div className="absolute -top-12 -right-12 w-28 h-28 rounded-full bg-gold/5 blur-2xl pointer-events-none" />
       <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-gold/30 to-transparent" />

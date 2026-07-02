@@ -3,6 +3,7 @@
 import React from 'react';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
+import { useTheme } from '@/components/theme/ThemeProvider';
 
 interface AppPageShellProps {
   eyebrow: string;
@@ -21,9 +22,15 @@ export default function AppPageShell({
   imageAlt,
   children,
 }: AppPageShellProps) {
+  const { theme, toggleTheme } = useTheme();
+
   return (
-    <main className="relative min-h-screen overflow-y-auto bg-[#05060A] pb-28 text-foreground select-none">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(201,167,106,0.10),transparent_34%),linear-gradient(180deg,rgba(7,9,15,0.10),rgba(5,6,10,0.97)_62%)]" />
+    <main className="relative min-h-screen overflow-y-auto bg-background pb-28 text-foreground select-none transition-colors duration-400">
+      <div className={`pointer-events-none fixed inset-0 transition-all duration-400 ${
+        theme === 'dark'
+          ? 'bg-[radial-gradient(circle_at_50%_0%,rgba(201,167,106,0.10),transparent_34%),linear-gradient(180deg,rgba(7,9,15,0.10),rgba(5,6,10,0.97)_62%)]'
+          : 'bg-[radial-gradient(circle_at_50%_0%,rgba(165,128,67,0.06),transparent_34%)]'
+      }`} />
 
       <div className="relative z-10 mx-auto flex w-full max-w-md flex-col px-6 pt-7">
         <motion.header
@@ -33,9 +40,23 @@ export default function AppPageShell({
           className="grid grid-cols-[1fr_auto] items-end gap-5 border-b border-gold/12 pb-5"
         >
           <div className="min-w-0">
-            <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-gold-muted/55">
-              {eyebrow}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-gold-muted/55">
+                {eyebrow}
+              </p>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                className="w-7 h-7 flex items-center justify-center rounded-full border border-gold/15 bg-gold/5 text-gold hover:border-gold/45 transition-all duration-300 cursor-pointer pointer-events-auto shadow-gold-glow"
+                title={theme === 'dark' ? '切换亮色' : '切换暗色'}
+              >
+                {theme === 'dark' ? (
+                  <span className="text-[11px] leading-none">☀</span>
+                ) : (
+                  <span className="text-[11px] leading-none">☾</span>
+                )}
+              </button>
+            </div>
             <h1 className="mt-3 text-[34px] font-serif font-semibold leading-none tracking-normal text-gold drop-shadow-[0_0_16px_rgba(201,167,106,0.22)]">
               {title}
             </h1>

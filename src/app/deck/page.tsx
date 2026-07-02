@@ -8,10 +8,12 @@ import { TarotCard as TarotCardType } from '@/lib/tarot/types';
 import BottomNav from '@/components/layout/BottomNav';
 import { getLocalReadings } from '@/lib/db/localJournal';
 import CardMeaningModal from '@/components/tarot/CardMeaningModal';
+import { useTheme } from '@/components/theme/ThemeProvider';
 
 export default function DeckPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all'); // 'all' | 'major' | 'wands' | 'cups' | 'swords' | 'pentacles'
+  const { theme } = useTheme();
   
   // 选中的卡片，用于弹窗详细浏览
   const [selectedCard, setSelectedCard] = useState<TarotCardType | null>(null);
@@ -54,10 +56,17 @@ export default function DeckPage() {
   };
 
   return (
-    <main className="flex-grow min-h-screen pb-28 flex flex-col items-center text-foreground relative overflow-y-auto select-none">
+    <main className="flex-grow min-h-screen pb-28 flex flex-col items-center text-foreground relative overflow-y-auto select-none bg-background transition-colors duration-400">
+      
+      {/* 极光背景层 */}
+      <div className={`pointer-events-none fixed inset-0 transition-all duration-400 ${
+        theme === 'dark'
+          ? 'bg-[radial-gradient(circle_at_50%_0%,rgba(201,167,106,0.10),transparent_34%),linear-gradient(180deg,rgba(7,9,15,0.10),rgba(5,6,10,0.97)_62%)]'
+          : 'bg-[radial-gradient(circle_at_50%_0%,rgba(165,128,67,0.06),transparent_34%)]'
+      }`} />
       
       {/* 顶部 Header */}
-      <div className="w-full max-w-md px-6 pt-12 flex flex-col items-start gap-1">
+      <div className="w-full max-w-md px-6 pt-12 flex flex-col items-start gap-1 relative z-10">
         <h1 className="text-2xl font-serif tracking-widest text-gold font-bold flex items-center gap-2">
           <Book className="w-5 h-5" />
           <span>牌义图鉴</span>
@@ -67,10 +76,10 @@ export default function DeckPage() {
         </p>
       </div>
 
-      <div className="w-full max-w-md px-6 flex-1 flex flex-col gap-4 mt-6">
+      <div className="w-full max-w-md px-6 flex-1 flex flex-col gap-4 mt-6 relative z-10">
         
         {/* 金边搜索框 */}
-        <div className="relative rounded-xl border border-gold/15 bg-card/45 p-1 flex items-center shadow-gold-glow focus-within:border-gold-focus transition-all duration-300">
+        <div className="relative rounded-xl border border-gold/15 bg-card/65 p-1 flex items-center shadow-gold-glow focus-within:border-gold-focus transition-all duration-300">
           <Search className="w-4 h-4 text-gold-muted/40 ml-3.5" />
           <input
             type="text"
@@ -94,15 +103,21 @@ export default function DeckPage() {
         <div className="flex gap-2 overflow-x-auto no-scrollbar py-1 px-0.5">
           {filterTabs.map((tab) => {
             const isActive = filterType === tab.id;
+            const activeClasses = theme === 'dark'
+              ? 'border-gold bg-[#1E1C16]/60 text-gold shadow-gold-glow font-semibold'
+              : 'border-gold-focus bg-gold/15 text-gold-focus font-semibold shadow-gold-glow';
+
+            const inactiveClasses = theme === 'dark'
+              ? 'border-gold/10 bg-[#0E1017]/35 text-gold-muted/65 hover:border-gold/25'
+              : 'border-gold/12 bg-card text-gold-muted hover:border-gold/30 hover:text-gold';
+
             return (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setFilterType(tab.id)}
                 className={`px-3.5 py-1.5 rounded-full border text-[10px] font-serif tracking-widest whitespace-nowrap cursor-pointer transition-all duration-300 ${
-                  isActive
-                    ? 'border-gold bg-[#1E1C16]/60 text-gold shadow-gold-glow font-semibold'
-                    : 'border-gold/10 bg-[#0E1017]/35 text-gold-muted/65 hover:border-gold/25'
+                  isActive ? activeClasses : inactiveClasses
                 }`}
               >
                 {tab.name}
@@ -118,14 +133,34 @@ export default function DeckPage() {
               const count = drawnStats[card.id] || 0;
               const isDrawn = count > 0;
 
+              const activeCardClasses = theme === 'dark'
+                ? 'border-gold/25 bg-[#11131A]/45 hover:border-gold/45 hover:bg-[#151722]/65 shadow-gold-glow'
+                : 'border-gold/25 bg-card hover:border-gold/45 hover:bg-gold/5 shadow-gold-glow';
+
+              const inactiveCardClasses = theme === 'dark'
+                ? 'border-dashed border-gold/10 bg-[#0B0D13]/10 opacity-75 hover:opacity-100 hover:border-gold/20'
+                : 'border-dashed border-gold/18 bg-card/65 opacity-85 hover:opacity-100 hover:border-gold/35';
+
+              const imgClasses = isDrawn
+                ? 'opacity-80 group-hover:opacity-100'
+                : (theme === 'dark' 
+                    ? 'opacity-20 filter grayscale contrast-50 group-hover:opacity-45' 
+                    : 'opacity-35 filter grayscale contrast-75 brightness-[1.05] group-hover:opacity-55');
+
+              const textClasses = isDrawn
+                ? (theme === 'dark' ? 'text-gold/90 font-semibold' : 'text-gold-focus font-bold')
+                : (theme === 'dark' ? 'text-gold-muted/40' : 'text-gold-muted/65');
+
+              const subTextClasses = isDrawn
+                ? (theme === 'dark' ? 'text-gold-muted/30 font-mono' : 'text-gold-muted/60 font-mono')
+                : (theme === 'dark' ? 'text-gold-muted/20 font-mono' : 'text-gold-muted/40 font-mono');
+
               return (
                 <div
                   key={card.id}
                   onClick={() => handleOpenModal(card)}
                   className={`rounded-xl border p-2 text-center flex flex-col justify-between items-center aspect-[2/3.3] cursor-pointer transition-all duration-300 group relative ${
-                    isDrawn
-                      ? 'border-gold/25 bg-[#11131A]/45 hover:border-gold/45 hover:bg-[#151722]/65 shadow-gold-glow'
-                      : 'border-dashed border-gold/10 bg-[#0B0D13]/10 opacity-75 hover:opacity-100 hover:border-gold/20'
+                    isDrawn ? activeCardClasses : inactiveCardClasses
                   }`}
                 >
                   {/* 已抽中的右上角次数徽标 */}
@@ -136,16 +171,12 @@ export default function DeckPage() {
                   )}
 
                   {/* 静态卡面图片，未抽中过展现灰度低明度 */}
-                  <div className="w-full flex-1 rounded-lg bg-[#06080C] border border-gold/5 flex items-center justify-center relative overflow-hidden group-hover:border-gold/25 transition-all">
+                  <div className="w-full flex-1 rounded-lg bg-white border border-gold/5 flex items-center justify-center relative overflow-hidden group-hover:border-gold/25 transition-all duration-400">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={card.image}
                       alt={card.zhName}
-                      className={`w-full h-full object-cover transition-all duration-500 ${
-                        isDrawn
-                          ? 'opacity-70 group-hover:opacity-100'
-                          : 'opacity-20 filter grayscale contrast-50 group-hover:opacity-45'
-                      }`}
+                      className={`w-full h-full object-cover transition-all duration-500 ${imgClasses}`}
                       onError={(e) => {
                         e.currentTarget.style.display = 'none';
                         const parent = e.currentTarget.parentElement;
@@ -166,12 +197,10 @@ export default function DeckPage() {
 
                   {/* 牌名 */}
                   <div className="w-full flex flex-col items-center mt-2.5">
-                    <span className={`text-[11px] font-serif font-medium tracking-widest truncate max-w-[80px] ${
-                      isDrawn ? 'text-gold/85' : 'text-gold-muted/40'
-                    }`}>
+                    <span className={`text-[11px] font-serif tracking-widest truncate max-w-[80px] ${textClasses}`}>
                       {card.zhName}
                     </span>
-                    <span className="text-[7px] text-gold-muted/30 font-mono tracking-tighter truncate max-w-[80px] mt-0.5 uppercase">
+                    <span className={`text-[7px] font-mono tracking-tighter truncate max-w-[80px] mt-0.5 uppercase ${subTextClasses}`}>
                       {card.name}
                     </span>
                   </div>
