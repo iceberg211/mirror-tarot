@@ -24,7 +24,6 @@ export default function AppPageShell({
   return (
     <main className="relative min-h-screen overflow-y-auto bg-[#05060A] pb-28 text-foreground select-none">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(201,167,106,0.10),transparent_34%),linear-gradient(180deg,rgba(7,9,15,0.10),rgba(5,6,10,0.97)_62%)]" />
-      <div className="pointer-events-none fixed left-1/2 top-0 h-full w-px -translate-x-1/2 bg-gradient-to-b from-gold/18 via-gold/5 to-transparent" />
 
       <div className="relative z-10 mx-auto flex w-full max-w-md flex-col px-6 pt-7">
         <motion.header

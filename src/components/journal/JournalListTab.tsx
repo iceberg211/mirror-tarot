@@ -168,12 +168,15 @@ export default function JournalListTab({
           ) : (
             /* 空白状态 */
             <div className="text-center py-12 border-y border-dashed border-gold/12">
-              <p className="text-xs text-gold-muted/50 font-serif">镜中暂时空无一物，期待第一篇倾听日记。</p>
+              <p className="text-xs text-gold font-serif tracking-widest">还没有镜面记录</p>
+              <p className="mx-auto mt-2 max-w-[260px] text-[11px] text-gold-muted/62 font-serif leading-6">
+                先完成一次今日一牌或写下一个正在牵动你的问题，之后这里会自动沉淀日记、梦境和追问。
+              </p>
               <Link
                 href="/"
                 className="mt-4 inline-block px-5 py-2 border border-gold/25 text-gold font-serif rounded-full text-[10px] hover:bg-gold/5 transition-all"
               >
-                开启塔罗探索
+                回到首页开始
               </Link>
             </div>
           )

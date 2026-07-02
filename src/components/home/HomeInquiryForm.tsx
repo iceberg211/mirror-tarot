@@ -3,7 +3,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { AlertCircle, ArrowLeft, Sparkles } from 'lucide-react';
-import { questionTemplates } from '@/hooks/useHomeReadingFlow';
+import { questionTemplates, recommendSpreadForQuestion } from '@/hooks/useHomeReadingFlow';
 import { moodConfigs } from '@/lib/tarot/moods';
 import { spreads } from '@/lib/tarot/spreads';
 import { SpreadType } from '@/lib/tarot/types';
@@ -61,6 +61,10 @@ export default function HomeInquiryForm({
   onSubmit,
 }: HomeInquiryFormProps) {
   const activeMood = moodConfigs.find((mood) => mood.id === selectedMood) || moodConfigs[0];
+  const recommendedSpread = question.trim()
+    ? recommendSpreadForQuestion(question, isDream)
+    : 'three_cards';
+  const recommendedSpreadName = spreads[recommendedSpread].name;
 
   return (
     <motion.section
@@ -75,7 +79,7 @@ export default function HomeInquiryForm({
         className="mb-6 flex items-center gap-2 text-xs font-serif tracking-widest text-gold-muted/80 transition-colors duration-300 hover:text-gold"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
-        返回入口
+        返回首页
       </button>
 
       <form onSubmit={onSubmit} className="flex flex-col gap-7">
@@ -84,10 +88,10 @@ export default function HomeInquiryForm({
             Inquiry
           </p>
           <h2 className="mt-2 text-2xl font-serif font-semibold leading-tight tracking-normal text-gold">
-            {isDream ? '把梦写下来' : '把问题写下来'}
+            {isDream ? '记录一个梦' : '写下你想问的事'}
           </h2>
           <p className="mt-3 text-xs font-serif leading-6 tracking-wide text-foreground/68">
-            不需要完整、漂亮或正确，只要接近此刻真实的念头。
+            一句话也可以。越接近真实处境，解读越有帮助。
           </p>
         </div>
 
@@ -108,7 +112,7 @@ export default function HomeInquiryForm({
           <textarea
             value={question}
             onChange={(event) => onQuestionChange(event.target.value)}
-            placeholder={isDream ? '记录梦里的碎片、情绪或冲突……' : '把你现在的困惑写下来……'}
+            placeholder={isDream ? '写下梦里的画面、情绪或冲突……' : '例如：我该如何面对这段关系里的不安？'}
             className="h-28 w-full resize-none bg-transparent pr-8 text-base font-serif leading-8 tracking-wide text-foreground/92 outline-none placeholder:text-gold-muted/35 no-scrollbar"
             maxLength={400}
           />
@@ -130,7 +134,7 @@ export default function HomeInquiryForm({
           <div className="flex items-end justify-between gap-3">
             <div>
               <p className="text-[10px] font-mono uppercase tracking-[0.26em] text-gold-muted/50">Mood</p>
-              <h3 className="mt-1 text-sm font-serif tracking-widest text-gold">现在的感受</h3>
+              <h3 className="mt-1 text-sm font-serif tracking-widest text-gold">此刻的感受</h3>
             </div>
             <p className="max-w-[150px] text-right text-[10px] font-serif leading-5 tracking-wide text-gold-muted/65">
               {activeMood.description}
@@ -159,9 +163,20 @@ export default function HomeInquiryForm({
         </section>
 
         <section className="flex flex-col gap-3">
-          <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.26em] text-gold-muted/50">Spread</p>
-            <h3 className="mt-1 text-sm font-serif tracking-widest text-gold">选择牌阵</h3>
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-[0.26em] text-gold-muted/50">Spread</p>
+              <h3 className="mt-1 text-sm font-serif tracking-widest text-gold">牌阵</h3>
+            </div>
+            {question.trim() && selectedSpread !== recommendedSpread && (
+              <button
+                type="button"
+                onClick={() => onSpreadChange(recommendedSpread)}
+                className="rounded-full border border-gold/20 px-3 py-1.5 text-[9px] font-serif tracking-widest text-gold-muted/75 transition-colors hover:border-gold/45 hover:text-gold"
+              >
+                推荐：{recommendedSpreadName}
+              </button>
+            )}
           </div>
 
           <div className="flex flex-col divide-y divide-gold/10 border-y border-gold/10">
@@ -180,6 +195,11 @@ export default function HomeInquiryForm({
                   <span>
                     <span className={`block text-xs font-serif font-semibold tracking-widest ${isSelected ? 'text-gold' : 'text-foreground/82'}`}>
                       {spread.name}
+                      {type === recommendedSpread && question.trim() && (
+                        <span className="ml-2 text-[8px] font-mono uppercase tracking-[0.18em] text-gold-muted/60">
+                          推荐
+                        </span>
+                      )}
                     </span>
                     <span className="mt-1 block text-[9px] font-serif tracking-wide text-gold-muted/58">
                       {positionText}
@@ -229,7 +249,7 @@ export default function HomeInquiryForm({
                     required
                     value={customPositionNames[index] || ''}
                     onChange={(event) => onCustomPositionChange(index, event.target.value)}
-                    placeholder="输入觉察名"
+                    placeholder="例如：阻碍"
                     maxLength={6}
                     className="h-9 border-b border-gold/12 bg-transparent text-xs font-serif tracking-widest text-gold outline-none transition-colors duration-300 placeholder:text-gold-muted/30 focus:border-gold/45"
                   />
@@ -244,7 +264,7 @@ export default function HomeInquiryForm({
           whileTap={{ scale: 0.98 }}
           className="h-12 w-full rounded-full border border-gold/45 bg-gold/10 text-sm font-serif font-semibold tracking-[0.24em] text-gold shadow-gold-glow transition-all duration-300 hover:bg-gold/15 hover:border-gold"
         >
-          开始抽牌
+          抽牌并生成解读
         </motion.button>
       </form>
     </motion.section>

@@ -2,7 +2,7 @@
 
 import React, { Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Trash2, Calendar, Star } from 'lucide-react';
+import { ArrowLeft, Trash2, Calendar, Star, ShieldCheck } from 'lucide-react';
 import ReadingResult from '@/components/tarot/ReadingResult';
 import BottomNav from '@/components/layout/BottomNav';
 import { getSpreadByType } from '@/lib/tarot/spreads';
@@ -11,11 +11,14 @@ import BreathingZen from '@/components/tarot/BreathingZen';
 import { useReadingDetail } from '@/hooks/useReadingDetail';
 import ConstellationLayout from '@/components/tarot/ConstellationLayout';
 import ReadingChatSection from '@/components/tarot/ReadingChatSection';
+import { useAuth } from '@/hooks/useAuth';
+import { saveLocalOnboardingState } from '@/lib/product/onboarding';
 
 function ReadingDetailContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
+  const { status, openAuthModal } = useAuth();
   
   const id = params.id as string;
   const trigger = searchParams.get('trigger') === 'true';
@@ -222,6 +225,32 @@ function ReadingDetailContent() {
             defaultSuggestions={defaultSuggestions}
             chatEndRef={chatEndRef}
           />
+        )}
+
+        {!generating && !isReadingEmpty && status === 'guest' && (
+          <div className="mt-6 w-full border-y border-gold/12 py-4">
+            <div className="flex items-start gap-3">
+              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-gold/80" />
+              <div className="flex-1">
+                <p className="text-xs font-serif font-semibold tracking-widest text-gold">
+                  保存这次镜面轨迹
+                </p>
+                <p className="mt-2 text-[11px] font-serif leading-6 tracking-wide text-gold-muted/72">
+                  登录后会把当前设备记录迁移到账号，用于跨设备同步和长期画像。
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveLocalOnboardingState({ authPromptSeen: true });
+                    openAuthModal();
+                  }}
+                  className="mt-3 rounded-full border border-gold/30 bg-gold/8 px-4 py-2 text-[10px] font-serif tracking-widest text-gold transition-colors hover:bg-gold/12"
+                >
+                  用邮箱保存
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 

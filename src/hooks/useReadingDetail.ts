@@ -12,8 +12,12 @@ import {
   updateChatHistory
 } from '@/lib/db/localJournal';
 import { useAudio } from '@/hooks/useAudio';
+import { useAuth } from '@/hooks/useAuth';
+import { useThrottledStreamText } from '@/hooks/useThrottledStreamText';
 import { ParsedReading } from '@/lib/tarot/types';
 import { getCardElement, parseStreamingReading, defaultSuggestions } from '@/lib/tarot/utils';
+import { saveUserOnboardingState } from '@/lib/auth/profile';
+import { saveLocalOnboardingState, OnboardingState } from '@/lib/product/onboarding';
 
 function isReadingEmpty(reading: ParsedReading): boolean {
   if (!reading) return true;
@@ -25,13 +29,20 @@ function isReadingEmpty(reading: ParsedReading): boolean {
 
 export function useReadingDetail(id: string, trigger: boolean) {
   const router = useRouter();
+  const { user } = useAuth();
   
   const [entry, setEntry] = useState<JournalEntry | null>(null);
   const [loading, setLoading] = useState(true);
 
   // 重新生成相关状态
   const [generating, setGenerating] = useState(false);
-  const [readingText, setReadingText] = useState('');
+  const {
+    text: readingText,
+    reset: resetReadingText,
+    append: appendReadingText,
+    setImmediateText: setReadingTextImmediate,
+    flush: flushReadingText,
+  } = useThrottledStreamText(80);
   const [readingError, setReadingError] = useState<string | null>(null);
   const [showZen, setShowZen] = useState(false);
   
@@ -48,6 +59,16 @@ export function useReadingDetail(id: string, trigger: boolean) {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const generationAbortRef = useRef<AbortController | null>(null);
   const hasAutoTriggeredRef = useRef(false);
+
+  const markOnboarding = useCallback((nextState: Partial<OnboardingState>) => {
+    if (user?.id) {
+      saveUserOnboardingState(user.id, nextState).catch((error) => {
+        console.error('Failed to save onboarding state:', error);
+      });
+      return;
+    }
+    saveLocalOnboardingState(nextState);
+  }, [user]);
 
   // 1. 加载数据并激活元素音效与云同步
   useEffect(() => {
@@ -131,7 +152,7 @@ export function useReadingDetail(id: string, trigger: boolean) {
     }
 
     setGenerating(true);
-    setReadingText('');
+    resetReadingText('');
     setReadingError(null);
     playAmbient();
 
@@ -179,8 +200,9 @@ export function useReadingDetail(id: string, trigger: boolean) {
         done = isDone;
         const chunk = decoder.decode(value, { stream: !done });
         text += chunk;
-        setReadingText(text);
+        appendReadingText(chunk);
       }
+      setReadingTextImmediate(text);
 
       if (text.trim().length < 30) {
         throw new Error('AI 生成的指引信息过短或不完整，请重试');
@@ -192,6 +214,7 @@ export function useReadingDetail(id: string, trigger: boolean) {
       
       if (ok) {
         setEntry((prev) => (prev ? { ...prev, reading: finalReading } : null));
+        markOnboarding({ firstReadingCompleted: true });
       } else {
         throw new Error('本地日记更新失败');
       }
@@ -202,6 +225,7 @@ export function useReadingDetail(id: string, trigger: boolean) {
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
+        flushReadingText();
         stopAmbient();
         setGenerating(false);
         if (controller && generationAbortRef.current === controller) {
@@ -210,6 +234,7 @@ export function useReadingDetail(id: string, trigger: boolean) {
         return;
       }
       console.error('Regenerate error:', err);
+      flushReadingText();
       stopAmbient();
       const errMsg = err instanceof Error ? err.message : String(err);
       setReadingError(errMsg || '重建情绪解读失败');
@@ -218,7 +243,7 @@ export function useReadingDetail(id: string, trigger: boolean) {
         generationAbortRef.current = null;
       }
     }
-  }, [entry, generating, playAmbient, router, stopAmbient, trigger]);
+  }, [appendReadingText, entry, flushReadingText, generating, markOnboarding, playAmbient, resetReadingText, router, setReadingTextImmediate, stopAmbient, trigger]);
 
   // 3. 页面加载完毕后自动触发流式 AI 解读 (如果要求 trigger 或当前数据空白)
   useEffect(() => {
@@ -239,6 +264,44 @@ export function useReadingDetail(id: string, trigger: boolean) {
     if (!inputText.trim() || chatLoading || !entry) return;
 
     const newMsg = { role: 'user' as const, content: inputText.trim() };
+    let flushTimer: number | null = null;
+    let assistantContent = '';
+
+    const flushAssistantMessage = () => {
+      if (flushTimer !== null) {
+        window.clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+
+      setChatMessages((prev) => {
+        const updated = [...prev];
+        const lastMsg = updated[updated.length - 1];
+        if (!lastMsg || lastMsg.role !== 'assistant') return prev;
+        updated[updated.length - 1] = {
+          ...lastMsg,
+          content: assistantContent,
+        };
+        return updated;
+      });
+    };
+
+    const scheduleAssistantFlush = () => {
+      if (flushTimer !== null) return;
+      flushTimer = window.setTimeout(() => {
+        flushTimer = null;
+        setChatMessages((prev) => {
+          const updated = [...prev];
+          const lastMsg = updated[updated.length - 1];
+          if (!lastMsg || lastMsg.role !== 'assistant') return prev;
+          updated[updated.length - 1] = {
+            ...lastMsg,
+            content: assistantContent,
+          };
+          return updated;
+        });
+      }, 80);
+    };
+
     setChatMessages((prev) => [...prev, newMsg]);
     setChatInput('');
     setChatLoading(true);
@@ -268,24 +331,15 @@ export function useReadingDetail(id: string, trigger: boolean) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
-      let assistantContent = '';
 
       while (!done) {
         const { value, done: isDone } = await reader.read();
         done = isDone;
         const chunk = decoder.decode(value, { stream: !done });
         assistantContent += chunk;
-
-        setChatMessages((prev) => {
-          const updated = [...prev];
-          const lastMsg = updated[updated.length - 1];
-          updated[updated.length - 1] = {
-            ...lastMsg,
-            content: lastMsg.content + chunk
-          };
-          return updated;
-        });
+        scheduleAssistantFlush();
       }
+      flushAssistantMessage();
 
       // 将最新消息持久化保存到本地和云端
       const finalHistory = [
@@ -300,8 +354,12 @@ export function useReadingDetail(id: string, trigger: boolean) {
       }));
       updateChatHistory(entry.id, mappedHistory);
       setEntry(prev => prev ? { ...prev, chatHistory: mappedHistory } : null);
+      markOnboarding({ firstFollowUpCompleted: true });
 
     } catch (err) {
+      if (flushTimer !== null) {
+        window.clearTimeout(flushTimer);
+      }
       console.error('Follow-up error:', err);
       const errMsg = err instanceof Error ? err.message : String(err);
       setChatMessages((prev) => [
@@ -314,7 +372,7 @@ export function useReadingDetail(id: string, trigger: boolean) {
     } finally {
       setChatLoading(false);
     }
-  }, [entry, chatLoading, chatMessages]);
+  }, [entry, chatLoading, chatMessages, markOnboarding]);
 
   const handleToggleStar = useCallback(() => {
     if (!entry) return;

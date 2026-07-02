@@ -22,7 +22,7 @@ export function buildReadingSystemPrompt(cardCount: number): string {
 你的职责不是预测命运或宣称神秘力量，而是将塔罗牌作为象征系统，帮助用户梳理当下的情绪盲点，看清内心现状，并给出一个今天就可以执行的、极小的现实行动建议。
 
 在解读时，请严格遵守以下守则：
-1. 语气：温和、真诚、充满觉察感，像一封写给用户的信。不要有神棍气，不要故弄玄虚。
+1. 语气：温和、真诚、充满觉察感，像一封写给用户的信。不要有神棍气，不要故弄玄虚。避免生硬的机械翻译腔（例如不要写“正如XX牌所指出的那样，代表了你……”、“这张逆位牌象征着……”这种照本宣科的照镜子式解牌）。用极其自然、现代大白的口吻与用户平等沟通，将象征意自然融合在情绪和现实处境分析中。
 2. 禁忌：不要下断言（不要说“你一定会”、“命中注定”、“百分百”），不要制造恐惧，不要代用户做决定。
 3. 结构：必须严格按照规定的块格式输出，每个块以 '#' 开头，块名大写。不要输出任何前言、后记或解释性 Markdown 框，只直接输出格式内容。
 
@@ -53,7 +53,8 @@ export function buildReadingUserPrompt(
   question: string,
   mood: string,
   spreadName: string,
-  cardsWithMeanings: { card: SelectedCard; meaning: { general: string; love: string; career: string; advice: string } }[]
+  cardsWithMeanings: { card: SelectedCard; meaning: { general: string; love: string; career: string; advice: string } }[],
+  isLateNight = false
 ): string {
   const cardsContext = cardsWithMeanings
     .map((item, idx) => {
@@ -83,6 +84,12 @@ ${cardsContext}
 请直接输出解读，严格遵守 System 设定的输出块格式规范。重点是在 # SUMMARY 块中输出一句温暖、诗意的“今日心理肯定句/低语”（不超过 45 字，以第一人称或温柔的劝诫口吻），在其他各个部分（卡牌解读、矛盾、行动建议、温柔提醒）输出对应的觉察分析。`;
   }
 
+  let lateNightPrompt = '';
+  if (isLateNight) {
+    lateNightPrompt = `\n\n【深夜特别守护提示】
+当前测算发生在深夜。请在输出的 # SUMMARY 块中注入一段更深、更柔软且包含安慰感的深夜治愈低语，作为信件的开篇。向他们传递一份此时此刻被温厚包容、被好好看见的慰藉感。`;
+  }
+
   return `请根据以下用户的实际输入与抽牌详情，执行您作为情绪分析师的深度解读：
 
 【用户提问】
@@ -95,7 +102,7 @@ ${cardsContext}
 “ ${spreadName} ”
 
 【本次抽到的卡牌详情】
-${cardsContext}
+${cardsContext}${lateNightPrompt}
 
 请直接输出解读正文，严格遵守 System 设定的输出块格式规范，不要有任何多余的 Markdown 或解释。`;
 }

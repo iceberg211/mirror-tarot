@@ -11,6 +11,8 @@ interface BreathingZenProps {
 }
 
 type BreathPhase = 'inhale' | 'holdIn' | 'exhale' | 'holdOut';
+const breathEase: [number, number, number, number] = [0.22, 1, 0.36, 1];
+const breathHoldEase: [number, number, number, number] = [0.16, 1, 0.3, 1];
 
 const themeConfigs = {
   water: {
@@ -184,13 +186,13 @@ export default function BreathingZen({ onClose, element = null }: BreathingZenPr
   const getAnimationConfig = () => {
     switch (phase) {
       case 'inhale':
-        return { scale: 1.25, opacity: 1, duration: 4 };
+        return { scale: 1.25, opacity: 1, duration: 4, ease: breathEase };
       case 'holdIn':
-        return { scale: 1.25, opacity: 0.9, duration: 0.2 };
+        return { scale: 1.25, opacity: 0.9, duration: 0.35, ease: breathHoldEase };
       case 'exhale':
-        return { scale: 0.8, opacity: 0.45, duration: 4 };
+        return { scale: 0.8, opacity: 0.45, duration: 4, ease: breathEase };
       case 'holdOut':
-        return { scale: 0.8, opacity: 0.45, duration: 0.2 };
+        return { scale: 0.8, opacity: 0.45, duration: 0.35, ease: breathHoldEase };
     }
   };
 
@@ -335,7 +337,7 @@ export default function BreathingZen({ onClose, element = null }: BreathingZenPr
               {/* 动态生命之花图腾 */}
               <motion.div
                 animate={{ scale: config.scale, opacity: config.opacity }}
-                transition={{ duration: config.duration, ease: 'easeInOut' }}
+                transition={{ duration: config.duration, ease: config.ease }}
                 className={`w-52 h-52 flex items-center justify-center ${theme.textColor}`}
               >
                 <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-[0_0_12px_rgba(201,167,106,0.35)]">

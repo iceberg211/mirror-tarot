@@ -87,7 +87,7 @@ export default function AnalyticsTab({
     if (totalCount === 0) {
       return {
         title: '云迷雾锁 ✦ 数据积累中',
-        description: '潜意识数据积累中。在 300 天内打卡情绪或开启塔罗日记，即可揭示心灵天气图景。',
+        description: '潜意识数据积累中。在 30 天内打卡情绪或开启塔罗日记，即可揭示心灵天气图景。',
         advice: '建议今日开启一次「每日镜面低语」或进行一次身心调息。',
         themeColor: 'text-gold-muted/60',
         bgGlow: 'rgba(201, 167, 106, 0.05)',
@@ -141,11 +141,11 @@ export default function AnalyticsTab({
 
   if (!analytics) return null;
 
-  const panelClass = 'w-full border-y border-gold/12 py-4 flex flex-col gap-3';
+  const panelClass = 'w-full border-y border-gold/12 py-5 flex flex-col gap-3 [content-visibility:auto] [contain-intrinsic-size:360px]';
   const panelHeaderClass = 'flex justify-between items-center border-b border-gold/10 pb-2 text-[10px] text-gold font-serif font-semibold tracking-widest uppercase';
 
   return (
-    <div className="w-full flex flex-col gap-8 animate-fadeIn pb-12">
+    <div className="w-full flex flex-col gap-7 animate-fadeIn pb-12">
       {/* 本月心灵天气晴雨表 */}
       {(() => {
         const weather = mindWeather;
@@ -155,7 +155,7 @@ export default function AnalyticsTab({
             style={{
               background: `radial-gradient(circle at 90% 10%, ${weather.bgGlow}, transparent 58%), transparent`
             }}
-            className="w-full border-y border-gold/12 py-4 flex gap-4 items-start animate-fadeIn"
+            className="w-full border-y border-gold/12 py-5 flex gap-4 items-start animate-fadeIn"
           >
             <div className={`w-12 h-12 rounded-full border border-gold/15 flex items-center justify-center flex-shrink-0 bg-[#0B0D13]/65 ${weather.themeColor}`}>
               <WeatherIcon className="w-6 h-6 animate-[pulse_3s_infinite]" />

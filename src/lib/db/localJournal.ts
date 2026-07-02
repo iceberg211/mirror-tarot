@@ -32,6 +32,7 @@ export interface JournalEntry {
 
 const LOCAL_STORAGE_KEY = 'mirror_tarot_journal';
 const DEVICE_ID_KEY = 'mirror_tarot_device_id';
+const ACTIVE_USER_ID_KEY = 'mirror_tarot_active_user_id';
 const IMPORT_BACKUP_STORAGE_KEY = 'mirror_tarot_import_backup';
 const SUPPORTED_BACKUP_VERSION = '1.0';
 const spreadTypes: SpreadType[] = ['one_card', 'three_cards', 'relationship', 'career', 'shadow', 'choice', 'mirror_cross', 'custom'];
@@ -46,6 +47,7 @@ interface JournalBackupData {
 
 interface CloudReadingRow {
   id: string;
+  user_id?: string | null;
   question: string;
   mood: string;
   spread_type: SpreadType;
@@ -62,6 +64,7 @@ interface CloudReadingPayload extends ParsedReading {
 }
 
 interface CloudCheckInRow {
+  user_id?: string | null;
   device_id: string;
   date: string;
   mood: string;
@@ -69,6 +72,12 @@ interface CloudCheckInRow {
 
 interface CloudMonthlyReportRow {
   report?: string | null;
+}
+
+interface StorageSnapshot {
+  readings: JournalEntry[];
+  checkins: CheckInEntry[];
+  monthlyReport: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -161,6 +170,123 @@ function isCloudEnabled(): boolean {
   return Boolean(supabase);
 }
 
+function getScopedStorageKey(baseKey: string, userId = getActiveUserId()): string {
+  return userId ? `${baseKey}:${userId}` : baseKey;
+}
+
+function readJsonArray<T>(key: string): T[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.error(`Failed to read localStorage key ${key}:`, e);
+    return [];
+  }
+}
+
+function writeJsonArray<T>(key: string, value: T[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function getReadingsFromKey(key: string): JournalEntry[] {
+  return readJsonArray<JournalEntry>(key);
+}
+
+function getCheckInsFromKey(key: string): CheckInEntry[] {
+  return readJsonArray<CheckInEntry>(key);
+}
+
+function getMonthlyReportFromKey(key: string): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return localStorage.getItem(key) || '';
+  } catch (e) {
+    console.error(`Failed to read localStorage key ${key}:`, e);
+    return '';
+  }
+}
+
+function setMonthlyReportForKey(key: string, reportText: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(key, reportText);
+}
+
+function getGuestStorageSnapshot(): StorageSnapshot {
+  return {
+    readings: getReadingsFromKey(LOCAL_STORAGE_KEY),
+    checkins: getCheckInsFromKey(CHECKIN_STORAGE_KEY),
+    monthlyReport: getMonthlyReportFromKey(MONTHLY_REPORT_KEY),
+  };
+}
+
+function getUserStorageSnapshot(userId: string): StorageSnapshot {
+  return {
+    readings: getReadingsFromKey(getScopedStorageKey(LOCAL_STORAGE_KEY, userId)),
+    checkins: getCheckInsFromKey(getScopedStorageKey(CHECKIN_STORAGE_KEY, userId)),
+    monthlyReport: getMonthlyReportFromKey(getScopedStorageKey(MONTHLY_REPORT_KEY, userId)),
+  };
+}
+
+function writeUserStorageSnapshot(userId: string, snapshot: StorageSnapshot): void {
+  writeJsonArray(getScopedStorageKey(LOCAL_STORAGE_KEY, userId), snapshot.readings);
+  writeJsonArray(getScopedStorageKey(CHECKIN_STORAGE_KEY, userId), snapshot.checkins);
+  if (snapshot.monthlyReport) {
+    setMonthlyReportForKey(getScopedStorageKey(MONTHLY_REPORT_KEY, userId), snapshot.monthlyReport);
+  }
+}
+
+function mergeReadings(current: JournalEntry[], incoming: JournalEntry[]): JournalEntry[] {
+  const readingsMap = new Map<string, JournalEntry>();
+  [...current, ...incoming].forEach((entry) => {
+    const existing = readingsMap.get(entry.id);
+    if (!existing || new Date(entry.createdAt) >= new Date(existing.createdAt)) {
+      readingsMap.set(entry.id, entry);
+    }
+  });
+
+  return Array.from(readingsMap.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+}
+
+function mergeCheckIns(current: CheckInEntry[], incoming: CheckInEntry[]): CheckInEntry[] {
+  const checkinsMap = new Map<string, CheckInEntry>();
+  [...current, ...incoming].forEach((entry) => checkinsMap.set(entry.date, entry));
+  return Array.from(checkinsMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function clearGuestStorage(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(LOCAL_STORAGE_KEY);
+  localStorage.removeItem(CHECKIN_STORAGE_KEY);
+  localStorage.removeItem(MONTHLY_REPORT_KEY);
+}
+
+export function getActiveUserId(): string {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem(ACTIVE_USER_ID_KEY) || '';
+}
+
+export function setActiveUserId(userId: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(ACTIVE_USER_ID_KEY, userId);
+}
+
+export function clearActiveUserId(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(ACTIVE_USER_ID_KEY);
+}
+
+export function clearUserLocalCache(userId: string): void {
+  if (typeof window === 'undefined' || !userId) return;
+  localStorage.removeItem(getScopedStorageKey(LOCAL_STORAGE_KEY, userId));
+  localStorage.removeItem(getScopedStorageKey(CHECKIN_STORAGE_KEY, userId));
+  localStorage.removeItem(getScopedStorageKey(MONTHLY_REPORT_KEY, userId));
+}
+
 export function getDeviceId(): string {
   if (typeof window === 'undefined') return '';
   let id = localStorage.getItem(DEVICE_ID_KEY);
@@ -187,13 +313,15 @@ export function extractActionSeed(actionAdvice: string): string {
 
 function saveAndSyncEntry(entry: JournalEntry, readings: JournalEntry[]): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(readings));
+  writeJsonArray(getScopedStorageKey(LOCAL_STORAGE_KEY), readings);
   
+  const userId = getActiveUserId();
   const deviceId = getDeviceId();
-  if (deviceId && supabase) {
+  if (userId && deviceId && supabase) {
     supabase.from('readings')
       .upsert({
         id: entry.id,
+        user_id: userId,
         device_id: deviceId,
         question: entry.question,
         mood: entry.mood,
@@ -268,15 +396,7 @@ export function saveLocalReading(
 }
 
 export function getLocalReadings(): JournalEntry[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const data = localStorage.getItem(LOCAL_STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch (e) {
-    console.error('Failed to read localStorage journal:', e);
-    return [];
-  }
+  return getReadingsFromKey(getScopedStorageKey(LOCAL_STORAGE_KEY));
 }
 
 export function getLocalReadingById(id: string): JournalEntry | undefined {
@@ -290,15 +410,16 @@ export function deleteLocalReading(id: string): boolean {
   try {
     const readings = getLocalReadings();
     const filtered = readings.filter((r) => r.id !== id);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filtered));
+    writeJsonArray(getScopedStorageKey(LOCAL_STORAGE_KEY), filtered);
 
     // 后台异步云端同步
+    const userId = getActiveUserId();
     const deviceId = getDeviceId();
-    if (deviceId && supabase) {
+    if (userId && deviceId && supabase) {
       supabase.from('readings')
         .delete()
         .eq('id', id)
-        .eq('device_id', deviceId)
+        .eq('user_id', userId)
         .then(({ error }) => {
           if (error) console.error('Failed to delete reading from Supabase:', error);
         });
@@ -439,15 +560,7 @@ export function getLocalDateString(dateInput?: Date): string {
  * 获取全部打卡历史
  */
 export function getLocalCheckIns(): CheckInEntry[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const data = localStorage.getItem(CHECKIN_STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch (e) {
-    console.error('Failed to read localStorage checkins:', e);
-    return [];
-  }
+  return getCheckInsFromKey(getScopedStorageKey(CHECKIN_STORAGE_KEY));
 }
 
 /**
@@ -462,17 +575,19 @@ export function saveLocalCheckIn(mood: string, dateInput?: string): boolean {
     const filtered = existing.filter((c) => c.date !== targetDate);
     const updated = [...filtered, { date: targetDate, mood }];
     
-    localStorage.setItem(CHECKIN_STORAGE_KEY, JSON.stringify(updated));
+    writeJsonArray(getScopedStorageKey(CHECKIN_STORAGE_KEY), updated);
 
     // 后台异步云端同步
+    const userId = getActiveUserId();
     const deviceId = getDeviceId();
-    if (deviceId && supabase) {
+    if (userId && deviceId && supabase) {
       supabase.from('checkins')
         .upsert({
+          user_id: userId,
           device_id: deviceId,
           date: targetDate,
           mood
-        }, { onConflict: 'device_id,date' })
+        }, { onConflict: 'user_id,date' })
         .then(({ error }) => {
           if (error) console.error('Failed to sync checkin to Supabase:', error);
         });
@@ -490,17 +605,19 @@ const MONTHLY_REPORT_KEY = 'mirror_tarot_monthly_report';
 export function saveLocalMonthlyReport(reportText: string): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(MONTHLY_REPORT_KEY, reportText);
+    setMonthlyReportForKey(getScopedStorageKey(MONTHLY_REPORT_KEY), reportText);
 
     // 后台异步云端同步
+    const userId = getActiveUserId();
     const deviceId = getDeviceId();
-    if (deviceId && supabase) {
+    if (userId && deviceId && supabase) {
       supabase.from('monthly_reports')
         .upsert({
+          user_id: userId,
           device_id: deviceId,
           report: reportText,
           updated_at: new Date().toISOString()
-        }, { onConflict: 'device_id' })
+        }, { onConflict: 'user_id' })
         .then(({ error }) => {
           if (error) console.error('Failed to sync monthly report to Supabase:', error);
         });
@@ -511,13 +628,7 @@ export function saveLocalMonthlyReport(reportText: string): void {
 }
 
 export function getLocalMonthlyReport(): string {
-  if (typeof window === 'undefined') return '';
-  try {
-    return localStorage.getItem(MONTHLY_REPORT_KEY) || '';
-  } catch (e) {
-    console.error('Failed to read monthly report from localStorage:', e);
-    return '';
-  }
+  return getMonthlyReportFromKey(getScopedStorageKey(MONTHLY_REPORT_KEY));
 }
 
 export interface JournalAnalytics {
@@ -690,10 +801,10 @@ export function importJournalData(jsonStr: string): boolean {
 
     const mergedCheckins = Array.from(checkinsMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(mergedReadings));
-    localStorage.setItem(CHECKIN_STORAGE_KEY, JSON.stringify(mergedCheckins));
+    writeJsonArray(getScopedStorageKey(LOCAL_STORAGE_KEY), mergedReadings);
+    writeJsonArray(getScopedStorageKey(CHECKIN_STORAGE_KEY), mergedCheckins);
     if (parsed.monthlyReport) {
-      localStorage.setItem(MONTHLY_REPORT_KEY, parsed.monthlyReport);
+      setMonthlyReportForKey(getScopedStorageKey(MONTHLY_REPORT_KEY), parsed.monthlyReport);
     }
 
     // 自动触发云端同步
@@ -712,15 +823,23 @@ export async function syncJournalData(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   if (!isCloudEnabled() || !supabase) return false;
 
+  let userId = getActiveUserId();
+  if (!userId) {
+    const { data } = await supabase.auth.getSession();
+    userId = data.session?.user.id || '';
+    if (userId) setActiveUserId(userId);
+  }
+  if (!userId) return false;
+
   const deviceId = getDeviceId();
   if (!deviceId) return false;
 
   try {
     // 1. 获取云端数据
     const [readingsRes, checkinsRes, reportRes] = await Promise.all([
-      supabase.from('readings').select('*').eq('device_id', deviceId),
-      supabase.from('checkins').select('*').eq('device_id', deviceId),
-      supabase.from('monthly_reports').select('*').eq('device_id', deviceId).maybeSingle()
+      supabase.from('readings').select('*').eq('user_id', userId),
+      supabase.from('checkins').select('*').eq('user_id', userId),
+      supabase.from('monthly_reports').select('*').eq('user_id', userId).maybeSingle()
     ]);
 
     if (readingsRes.error) console.error('Error fetching readings from Supabase:', readingsRes.error);
@@ -732,10 +851,7 @@ export async function syncJournalData(): Promise<boolean> {
     const cloudReport = reportRes.data as CloudMonthlyReportRow | null;
 
     // 2. 合并日记 readings
-    const localReadings = getLocalReadings();
-    const readingsMap = new Map<string, JournalEntry>();
-
-    cloudReadings.forEach((r) => {
+    const cloudMappedReadings = cloudReadings.map((r) => {
       const {
         _chatHistory: chatHistory,
         _isStarred: isStarred,
@@ -743,7 +859,7 @@ export async function syncJournalData(): Promise<boolean> {
         ...cleanReading
       } = r.reading;
 
-      readingsMap.set(r.id, {
+      return {
         id: r.id,
         question: r.question,
         mood: r.mood,
@@ -755,36 +871,19 @@ export async function syncJournalData(): Promise<boolean> {
         chatHistory,
         isStarred,
         actionSeed,
-      });
+      };
     });
 
-    localReadings.forEach((r) => {
-      const existing = readingsMap.get(r.id);
-      if (!existing || new Date(r.createdAt) > new Date(existing.createdAt)) {
-        readingsMap.set(r.id, r);
-      }
-    });
-
-    const mergedReadings = Array.from(readingsMap.values()).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    const localReadings = getLocalReadings();
+    const mergedReadings = mergeReadings(cloudMappedReadings, localReadings);
 
     // 3. 合并打卡 checkins
+    const cloudMappedCheckins = cloudCheckins.map((c) => ({
+      date: c.date,
+      mood: c.mood,
+    }));
     const localCheckins = getLocalCheckIns();
-    const checkinsMap = new Map<string, CheckInEntry>();
-
-    cloudCheckins.forEach((c) => {
-      checkinsMap.set(c.date, {
-        date: c.date,
-        mood: c.mood,
-      });
-    });
-
-    localCheckins.forEach((c) => {
-      checkinsMap.set(c.date, c);
-    });
-
-    const mergedCheckins = Array.from(checkinsMap.values());
+    const mergedCheckins = mergeCheckIns(cloudMappedCheckins, localCheckins);
 
     // 4. 合并月度报告 monthly_report
     const localReport = getLocalMonthlyReport();
@@ -796,24 +895,25 @@ export async function syncJournalData(): Promise<boolean> {
     }
 
     // 5. 将合并后的完整数据写回本地 localStorage
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(mergedReadings));
-    localStorage.setItem(CHECKIN_STORAGE_KEY, JSON.stringify(mergedCheckins));
+    writeJsonArray(getScopedStorageKey(LOCAL_STORAGE_KEY, userId), mergedReadings);
+    writeJsonArray(getScopedStorageKey(CHECKIN_STORAGE_KEY, userId), mergedCheckins);
     if (mergedReport) {
-      localStorage.setItem(MONTHLY_REPORT_KEY, mergedReport);
+      setMonthlyReportForKey(getScopedStorageKey(MONTHLY_REPORT_KEY, userId), mergedReport);
     }
 
     // 6. 将本地独有数据同步推送到云端
     const cloudReadingIds = new Set(cloudReadings.map((r) => r.id));
     const readingsToPush = mergedReadings.filter((r) => !cloudReadingIds.has(r.id));
 
-    const cloudCheckinKeys = new Set(cloudCheckins.map((c) => `${c.device_id}_${c.date}`));
-    const checkinsToPush = mergedCheckins.filter((c) => !cloudCheckinKeys.has(`${deviceId}_${c.date}`));
+    const cloudCheckinDates = new Set(cloudCheckins.map((c) => c.date));
+    const checkinsToPush = mergedCheckins.filter((c) => !cloudCheckinDates.has(c.date));
 
     const pushPromises: Promise<unknown>[] = [];
 
     if (readingsToPush.length > 0) {
       const dbReadings = readingsToPush.map((r) => ({
         id: r.id,
+        user_id: userId,
         device_id: deviceId,
         question: r.question,
         mood: r.mood,
@@ -833,21 +933,23 @@ export async function syncJournalData(): Promise<boolean> {
 
     if (checkinsToPush.length > 0) {
       const dbCheckins = checkinsToPush.map((c) => ({
+        user_id: userId,
         device_id: deviceId,
         date: c.date,
         mood: c.mood,
       }));
-      pushPromises.push(Promise.resolve(supabase.from('checkins').upsert(dbCheckins)));
+      pushPromises.push(Promise.resolve(supabase.from('checkins').upsert(dbCheckins, { onConflict: 'user_id,date' })));
     }
 
     if (localReport && (!cloudReport || cloudReport.report !== localReport)) {
       pushPromises.push(
         Promise.resolve(
           supabase.from('monthly_reports').upsert({
+            user_id: userId,
             device_id: deviceId,
             report: localReport,
             updated_at: new Date().toISOString(),
-          }, { onConflict: 'device_id' })
+          }, { onConflict: 'user_id' })
         )
       );
     }
@@ -861,4 +963,26 @@ export async function syncJournalData(): Promise<boolean> {
     console.error('Failed to sync journal data with Supabase:', e);
     return false;
   }
+}
+
+export async function migrateGuestDataToUser(userId: string): Promise<boolean> {
+  if (typeof window === 'undefined' || !userId) return false;
+
+  const guestSnapshot = getGuestStorageSnapshot();
+  const userSnapshot = getUserStorageSnapshot(userId);
+  const mergedSnapshot: StorageSnapshot = {
+    readings: mergeReadings(userSnapshot.readings, guestSnapshot.readings),
+    checkins: mergeCheckIns(userSnapshot.checkins, guestSnapshot.checkins),
+    monthlyReport: userSnapshot.monthlyReport || guestSnapshot.monthlyReport,
+  };
+
+  setActiveUserId(userId);
+  writeUserStorageSnapshot(userId, mergedSnapshot);
+
+  const syncOk = await syncJournalData();
+  if (syncOk) {
+    clearGuestStorage();
+  }
+
+  return syncOk;
 }

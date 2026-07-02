@@ -4,7 +4,7 @@
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 
-const migrationFile = 'supabase/migrations/202606170001_init_journal_sync.sql';
+const migrationsDir = 'supabase/migrations';
 
 function loadLocalEnv() {
   if (!fs.existsSync('.env.local')) return {};
@@ -31,8 +31,20 @@ function main() {
   const localEnv = loadLocalEnv();
   const databaseUrl = process.env.SUPABASE_DB_URL || localEnv.SUPABASE_DB_URL || process.env.DATABASE_URL;
 
-  if (!fs.existsSync(migrationFile)) {
-    console.error(`找不到初始化 SQL：${migrationFile}`);
+  if (!fs.existsSync(migrationsDir)) {
+    console.error(`找不到迁移目录：${migrationsDir}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  const migrationFiles = fs
+    .readdirSync(migrationsDir)
+    .filter((file) => file.endsWith('.sql'))
+    .sort()
+    .map((file) => `${migrationsDir}/${file}`);
+
+  if (migrationFiles.length === 0) {
+    console.error(`迁移目录中没有 SQL 文件：${migrationsDir}`);
     process.exitCode = 1;
     return;
   }
@@ -41,7 +53,7 @@ function main() {
     console.error('缺少 SUPABASE_DB_URL。');
     console.error('');
     console.error('方式一：打开 Supabase SQL Editor，复制并执行：');
-    console.error(`  ${migrationFile}`);
+    migrationFiles.forEach((file) => console.error(`  ${file}`));
     console.error('');
     console.error('方式二：从 Supabase Project Settings -> Database 复制连接串后运行：');
     console.error("  SUPABASE_DB_URL='postgresql://...' npm run db:init");
@@ -64,19 +76,21 @@ function main() {
 
   console.log('正在执行 Supabase 初始化 SQL...');
 
-  const result = spawnSync('psql', [databaseUrl, '-v', 'ON_ERROR_STOP=1', '-f', migrationFile], {
-    stdio: 'inherit',
-  });
+  for (const migrationFile of migrationFiles) {
+    console.log(`- ${migrationFile}`);
+    const result = spawnSync('psql', [databaseUrl, '-v', 'ON_ERROR_STOP=1', '-f', migrationFile], {
+      stdio: 'inherit',
+    });
 
-  if (result.status === 0) {
-    console.log('');
-    console.log('Supabase 初始化完成。建议继续运行：');
-    console.log('  npm run db:check');
-    console.log('  npm run db:check:write');
-    return;
+    if (result.status !== 0) {
+      process.exitCode = result.status || 1;
+      return;
+    }
   }
 
-  process.exitCode = result.status || 1;
+  console.log('');
+  console.log('Supabase 初始化完成。建议继续运行：');
+  console.log('  npm run db:check');
 }
 
 main();

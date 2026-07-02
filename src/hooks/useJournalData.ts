@@ -103,6 +103,25 @@ export function useJournalData() {
 
   const handleGenerateReport = async () => {
     if (generatingReport || !analytics) return;
+    let reportFlushTimer: number | null = null;
+    let text = '';
+
+    const flushReportText = () => {
+      if (reportFlushTimer !== null) {
+        window.clearTimeout(reportFlushTimer);
+        reportFlushTimer = null;
+      }
+      setMonthlyReport(text);
+    };
+
+    const scheduleReportFlush = () => {
+      if (reportFlushTimer !== null) return;
+      reportFlushTimer = window.setTimeout(() => {
+        reportFlushTimer = null;
+        setMonthlyReport(text);
+      }, 120);
+    };
+
     setGeneratingReport(true);
     setMonthlyReport('');
     setReportError(null);
@@ -138,15 +157,15 @@ export function useJournalData() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let done = false;
-      let text = '';
 
       while (!done) {
         const { value, done: isDone } = await reader.read();
         done = isDone;
         const chunk = decoder.decode(value, { stream: !done });
         text += chunk;
-        setMonthlyReport(text);
+        scheduleReportFlush();
       }
+      flushReportText();
 
       if (text.trim().length < 40) {
         throw new Error('AI 分析生成的文本过短，请重试');
@@ -156,6 +175,9 @@ export function useJournalData() {
       stopAmbient();
       setGeneratingReport(false);
     } catch (err) {
+      if (reportFlushTimer !== null) {
+        window.clearTimeout(reportFlushTimer);
+      }
       console.error('Generate report error:', err);
       stopAmbient();
       const errMsg = err instanceof Error ? err.message : String(err);

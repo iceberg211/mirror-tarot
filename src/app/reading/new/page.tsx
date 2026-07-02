@@ -33,9 +33,9 @@ function ReadingNewContent() {
     spreadType === 'custom'
       ? {
           type: 'custom' as SpreadType,
-          name: '自定义心智牌阵',
+          name: '自定义牌阵',
           positions: customPositions.length > 0 ? customPositions : ['我的问题'],
-          description: '基于用户当前心智诉求，由用户自定义各维度解析方向的觉察牌阵。'
+          description: '自己命名每张牌的位置，按你关心的角度来抽牌。'
         }
       : getSpreadByType(spreadType)
   ), [customPositions, spreadType]);
@@ -153,7 +153,23 @@ function ReadingNewContent() {
     }
   };
 
-  // 用户点击“开启 MIRROR 情绪解读”触发跳转与生成
+  // 一键依次快速翻开所有卡牌
+  const handleRevealAll = () => {
+    if (serverCards.length === 0) return;
+    serverCards.forEach((_, idx) => {
+      setTimeout(() => {
+        setRevealedStates((prev) => {
+          const next = { ...prev, [idx]: true };
+          if (Object.keys(next).length === positionCount) {
+            setAllRevealed(true);
+          }
+          return next;
+        });
+      }, idx * 150);
+    });
+  };
+
+  // 用户点击“生成解读”后保存记录并跳转
   const handleStartReading = () => {
     if (serverCards.length === 0) return;
     setSaveError(null);
@@ -255,10 +271,19 @@ function ReadingNewContent() {
         {/* 2. 状态：翻开揭示卡牌 */}
         {step === 'reveal' && (
           <div className="w-full flex-grow flex flex-col justify-between items-center py-6">
-            <div className="text-center mb-6">
+            <div className="text-center mb-6 flex flex-col items-center gap-2">
               <h2 className="text-xs text-gold font-serif tracking-widest animate-pulse font-semibold">
                 ✦ 依次翻开卡牌，建立心灵映射 ✦
               </h2>
+              {!allRevealed && (
+                <button
+                  type="button"
+                  onClick={handleRevealAll}
+                  className="mt-1 text-[9px] text-gold-muted/65 hover:text-gold font-serif tracking-widest border border-gold/12 hover:border-gold/30 bg-gold/5 hover:bg-gold/8 px-2.5 py-1 rounded-full transition-all duration-300 cursor-pointer"
+                >
+                  ✦ 一键快速翻开 ✦
+                </button>
+              )}
             </div>
 
             {/* 卡牌平铺展示 */}
@@ -294,7 +319,7 @@ function ReadingNewContent() {
                     className="w-full h-12 rounded-xl bg-gradient-to-r from-[#171610] via-[#2E281C] to-[#171610] border border-gold text-gold text-sm font-serif font-semibold tracking-[0.25em] shadow-gold-glow flex items-center justify-center gap-2 cursor-pointer transition-all hover:brightness-110"
                   >
                     <Sparkles className="w-4 h-4" />
-                    <span>开启 MIRROR 情绪解读</span>
+                    <span>生成本次解读</span>
                   </motion.button>
                 )}
               </AnimatePresence>

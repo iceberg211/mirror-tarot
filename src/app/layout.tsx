@@ -1,9 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import AppProviders from "@/components/providers/AppProviders";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Mirror Tarot ✦ 镜面情绪日记",
-  description: "通过塔罗卡牌与 AI 深度对话，探索您的潜意识深处，记录情绪水位波动。",
+  description: "用塔罗与 AI 整理当下问题，记录情绪、梦境和每次解读。",
 };
 
 export const viewport: Viewport = {
@@ -20,10 +21,12 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="zh-CN"
       className="h-full antialiased"
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   );
 }

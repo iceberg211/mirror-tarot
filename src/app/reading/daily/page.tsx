@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Moon, Sparkles, Volume2, VolumeX } from 'lucide-react';
@@ -10,6 +10,7 @@ import { SelectedCard, ParsedReading } from '@/lib/tarot/types';
 import TarotCard from '@/components/tarot/TarotCard';
 import { moodConfigs } from '@/lib/tarot/moods';
 import { parseStreamingReading } from '@/lib/tarot/utils';
+import { useThrottledStreamText } from '@/hooks/useThrottledStreamText';
 
 export default function DailyReadingPage() {
   const router = useRouter();
@@ -22,7 +23,12 @@ export default function DailyReadingPage() {
   const [pressWarning, setPressWarning] = useState('');
 
   const [drawnCard, setDrawnCard] = useState<SelectedCard | null>(null);
-  const [readingText, setReadingText] = useState('');
+  const {
+    text: readingText,
+    reset: resetReadingText,
+    append: appendReadingText,
+    setImmediateText: setReadingTextImmediate,
+  } = useThrottledStreamText(80);
   const [parsedReading, setParsedReading] = useState<ParsedReading | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [interpreting, setInterpreting] = useState(false);
@@ -32,6 +38,13 @@ export default function DailyReadingPage() {
   const progressRef = useRef(0);
 
   const moodName = moodConfigs.find((m) => m.id === selectedMood)?.name || '平静';
+  const streamingSummary = useMemo(() => {
+    return readingText
+      .split('# ')
+      .find((part) => part.startsWith('SUMMARY'))
+      ?.replace('SUMMARY\n', '')
+      .trim();
+  }, [readingText]);
 
   // 1. 长按手势处理
   const handlePressStart = (e: React.PointerEvent) => {
@@ -115,7 +128,7 @@ export default function DailyReadingPage() {
   // 3. 产生 AI 今日低语流式解读
   const handleGenerateReading = async (card: SelectedCard) => {
     setInterpreting(true);
-    setReadingText('');
+    resetReadingText('');
     setApiError('');
 
     try {
@@ -146,8 +159,9 @@ export default function DailyReadingPage() {
         done = isDone;
         const chunk = decoder.decode(value, { stream: !done });
         text += chunk;
-        setReadingText(text);
+        appendReadingText(chunk);
       }
+      setReadingTextImmediate(text);
 
       const finalParsed = parseStreamingReading(text, 1);
       setParsedReading(finalParsed);
@@ -365,7 +379,7 @@ export default function DailyReadingPage() {
                   <div className="flex flex-col gap-2.5 items-center">
                     <Sparkles className="w-4 h-4 text-gold animate-spin" />
                     <p className="text-[11px] text-gold-muted/85 font-serif leading-relaxed tracking-wider px-2">
-                      “ {readingText.split('# ').find(p => p.startsWith('SUMMARY'))?.replace('SUMMARY\n', '') || '正在捕捉卡牌能量，织就属于您的晨间低语...'} ”
+                      “ {streamingSummary || '正在捕捉卡牌能量，织就属于您的晨间低语...'} ”
                     </p>
                   </div>
                 ) : (

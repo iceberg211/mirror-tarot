@@ -2,7 +2,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 
 const fs = require('fs');
-const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
 const ENV_FILE = '.env.local';
@@ -45,15 +44,23 @@ function createSupabaseClient() {
 const tableChecks = [
   {
     name: 'readings',
-    columns: 'id,device_id,question,mood,spread_type,cards,reading,created_at,updated_at,is_dream',
+    columns: 'id,user_id,device_id,question,mood,spread_type,cards,reading,created_at,updated_at,is_dream',
   },
   {
     name: 'checkins',
-    columns: 'device_id,date,mood,created_at,updated_at',
+    columns: 'user_id,device_id,date,mood,created_at,updated_at',
   },
   {
     name: 'monthly_reports',
-    columns: 'device_id,report,created_at,updated_at',
+    columns: 'user_id,device_id,report,created_at,updated_at',
+  },
+  {
+    name: 'profiles',
+    columns: 'id,email,display_name,onboarding_state,privacy_settings,created_at,updated_at',
+  },
+  {
+    name: 'insight_snapshots',
+    columns: 'user_id,period_days,metrics,summary,created_at,updated_at',
   },
 ];
 
@@ -91,135 +98,6 @@ async function checkTables(supabase) {
   return !hasError;
 }
 
-async function runWriteCheck(supabase) {
-  const nonce = crypto.randomUUID();
-  const deviceId = `codex-healthcheck-${nonce}`;
-  const readingId = `local-${nonce}`;
-  const createdAt = new Date().toISOString();
-  const date = createdAt.slice(0, 10);
-
-  const readingPayload = {
-    id: readingId,
-    device_id: deviceId,
-    question: 'Codex 数据库写入健康检查',
-    mood: '平静',
-    spread_type: 'one_card',
-    cards: [
-      {
-        id: 'major-0',
-        number: 0,
-        name: 'The Fool',
-        zhName: '愚人',
-        arcana: 'major',
-        image: '/cards/major-0.jpg',
-        keywords: {
-          upright: ['开始'],
-          reversed: ['鲁莽'],
-        },
-        orientation: 'upright',
-        positionName: '今日提示',
-        positionOrder: 0,
-      },
-    ],
-    reading: {
-      questionSummary: '健康检查',
-      intuitiveSummary: '健康检查',
-      cardReadings: [
-        {
-          positionName: '今日提示',
-          cardName: 'The Fool',
-          cardZhName: '愚人',
-          orientation: 'upright',
-          interpretation: '健康检查',
-        },
-      ],
-      contradiction: '',
-      overlookedFactor: '',
-      actionAdvice: '',
-      gentleReminder: '',
-      followUpSuggestions: [],
-    },
-    created_at: createdAt,
-    is_dream: false,
-  };
-
-  const checks = [
-    [
-      'readings 写入',
-      () => supabase.from('readings').insert(readingPayload).select('id').single(),
-    ],
-    [
-      'checkins 写入',
-      () =>
-        supabase
-          .from('checkins')
-          .upsert(
-            {
-              device_id: deviceId,
-              date,
-              mood: '平静',
-            },
-            { onConflict: 'device_id,date' },
-          )
-          .select('device_id')
-          .single(),
-    ],
-    [
-      'monthly_reports 写入',
-      () =>
-        supabase
-          .from('monthly_reports')
-          .upsert(
-            {
-              device_id: deviceId,
-              report: 'Codex 数据库写入健康检查',
-              updated_at: createdAt,
-            },
-            { onConflict: 'device_id' },
-          )
-          .select('device_id')
-          .single(),
-    ],
-  ];
-
-  const cleanupChecks = [
-    ['readings 清理', () => supabase.from('readings').delete().eq('id', readingId)],
-    ['checkins 清理', () => supabase.from('checkins').delete().eq('device_id', deviceId)],
-    [
-      'monthly_reports 清理',
-      () => supabase.from('monthly_reports').delete().eq('device_id', deviceId),
-    ],
-  ];
-
-  let hasError = false;
-
-  console.log('正在执行写入健康检查...');
-
-  for (const [label, run] of checks) {
-    const { error } = await run();
-    if (error) {
-      hasError = true;
-      console.error(`- ${label}: 失败 ${error.code || ''} ${error.message}`);
-    } else {
-      console.log(`- ${label}: 正常`);
-    }
-  }
-
-  console.log('正在清理健康检查临时数据...');
-
-  for (const [label, run] of cleanupChecks) {
-    const { error } = await run();
-    if (error) {
-      hasError = true;
-      console.error(`- ${label}: 失败 ${error.code || ''} ${error.message}`);
-    } else {
-      console.log(`- ${label}: 正常`);
-    }
-  }
-
-  return !hasError;
-}
-
 async function main() {
   const shouldWrite = process.argv.includes('--write');
   const supabase = createSupabaseClient();
@@ -231,8 +109,10 @@ async function main() {
   }
 
   if (shouldWrite) {
-    const writeOk = await runWriteCheck(supabase);
-    if (!writeOk) process.exitCode = 1;
+    console.error('');
+    console.error('账号级 RLS 已开启，匿名 publishable key 不能执行写入健康检查。');
+    console.error('请登录应用进行真实写入验证，或在 Supabase 控制台检查 RLS 策略。');
+    console.error('结构检查已覆盖 readings、checkins、monthly_reports、profiles、insight_snapshots。');
   }
 }
 

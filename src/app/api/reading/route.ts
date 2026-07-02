@@ -29,9 +29,14 @@ export async function POST(req: Request) {
       meaning: getCardMeaning(c.id, c.orientation),
     }));
 
+    // 获取北京时间并判断是否处于深夜时间段 (23点到凌晨4点)
+    const shanghaiTimeStr = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+    const localHour = new Date(shanghaiTimeStr).getHours();
+    const isLateNight = localHour >= 23 || localHour < 4;
+
     // 生成分离架构的 System 与 User Prompts
     const systemPrompt = buildReadingSystemPrompt(cards.length);
-    const userPrompt = buildReadingUserPrompt(question, mood, spread.name, cardsWithMeanings);
+    const userPrompt = buildReadingUserPrompt(question, mood, spread.name, cardsWithMeanings, isLateNight);
 
     // 调起公用流请求与 SSE 解析助手，传递双消息角色，提高生成质量与输出格式稳定性
     return await createQwenChatStream([
