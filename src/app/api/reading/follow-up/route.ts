@@ -1,4 +1,4 @@
-import { createQwenChatStream } from '@/lib/ai/qwen';
+import { createAIChatStream } from '@/lib/ai/client';
 import { AI_PROMPT_VERSIONS, buildFollowUpSystemPrompt, buildFollowUpUserPrompt } from '@/lib/ai/prompts';
 
 export async function POST(req: Request) {
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     );
 
     // 调起公用流请求，传递双角色设定，确保 AI 保持客观睿智和字数约束
-    return await createQwenChatStream([
+    return await createAIChatStream([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ], {

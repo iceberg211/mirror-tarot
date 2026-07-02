@@ -5,10 +5,7 @@ import { useRouter } from 'next/navigation';
 import { SpreadType } from '@/lib/tarot/types';
 import { moodConfigs } from '@/lib/tarot/moods';
 import { useAudio } from '@/hooks/useAudio';
-import {
-  getLocalReadings,
-  JournalEntry,
-} from '@/lib/db/localJournal';
+import { getLocalReadings } from '@/lib/db/localJournal';
 import { getTodayMoonPhase } from '@/lib/tarot/moonPhase';
 
 export const questionTemplates = [

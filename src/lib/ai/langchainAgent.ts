@@ -78,6 +78,12 @@ function createAIRequestId(requestName: string): string {
   return `${requestName}-${suffix}`;
 }
 
+function isAgentMessage(
+  message: ChatMessage
+): message is { role: 'user' | 'assistant'; content: string } {
+  return message.role !== 'system';
+}
+
 function splitSystemPrompt(messages: ChatMessage[]): {
   systemPrompt: string;
   messages: { role: 'user' | 'assistant'; content: string }[];
@@ -88,7 +94,7 @@ function splitSystemPrompt(messages: ChatMessage[]): {
     .join('\n\n');
 
   const agentMessages = messages
-    .filter((message) => message.role !== 'system')
+    .filter(isAgentMessage)
     .map((message) => ({
       role: message.role,
       content: message.content,
@@ -245,7 +251,13 @@ export async function createLangChainJsonCompletion<T>(
     );
     const rawContent = getLastAIText(result.messages);
     const cleanedContent = stripJsonMarkdown(rawContent);
-    const parsed: unknown = JSON.parse(cleanedContent);
+    let parsed: unknown;
+
+    try {
+      parsed = JSON.parse(cleanedContent);
+    } catch {
+      throw new LangChainResponseFormatError('AI 返回的数据不是合法 JSON', requestId, cleanedContent);
+    }
 
     if (optionsInput.validate && !optionsInput.validate(parsed)) {
       throw new LangChainResponseFormatError('AI JSON 结构不符合预期', requestId, cleanedContent);
@@ -263,10 +275,6 @@ export async function createLangChainJsonCompletion<T>(
   } catch (error) {
     if (error instanceof LangChainResponseFormatError) {
       throw error;
-    }
-
-    if (error instanceof SyntaxError) {
-      throw new LangChainResponseFormatError('AI 返回的数据不是合法 JSON', requestId, error.message);
     }
 
     const message = error instanceof Error ? error.message : String(error);

@@ -12,11 +12,9 @@
     "db:check:write": "node scripts/check-supabase.cjs --write"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^3.0.71",
     "@langchain/core": "^1.2.1",
     "@langchain/openai": "^1.5.3",
     "@supabase/supabase-js": "^2.108.2",
-    "ai": "^6.0.205",
     "framer-motion": "^12.40.0",
     "html-to-image": "^1.11.13",
     "langchain": "^1.5.2",

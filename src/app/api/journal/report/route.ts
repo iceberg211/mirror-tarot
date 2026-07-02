@@ -1,4 +1,4 @@
-import { createQwenChatStream } from '@/lib/ai/qwen';
+import { createAIChatStream } from '@/lib/ai/client';
 import { AI_PROMPT_VERSIONS, buildMonthlyReportPrompt } from '@/lib/ai/prompts';
 
 interface ReportCheckIn {
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     const promptText = buildMonthlyReportPrompt({ checkins, readings, topCards });
 
     // 一键调起公用流请求与 SSE 解析助手
-    return await createQwenChatStream([{ role: 'user', content: promptText }], {
+    return await createAIChatStream([{ role: 'user', content: promptText }], {
       temperature: 0.8,
       requestName: 'monthly-report',
       promptVersion: AI_PROMPT_VERSIONS.monthlyReport,

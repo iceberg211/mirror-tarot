@@ -1,4 +1,4 @@
-import { createQwenChatStream } from '@/lib/ai/qwen';
+import { createAIChatStream } from '@/lib/ai/client';
 import { AI_PROMPT_VERSIONS, buildReadingSystemPrompt, buildReadingUserPrompt } from '@/lib/ai/prompts';
 import { getCardMeaning } from '@/lib/tarot/meanings';
 import { getSpreadByType } from '@/lib/tarot/spreads';
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     const userPrompt = buildReadingUserPrompt(question, mood, spread.name, cardsWithMeanings, isLateNight, historyContext);
 
     // 调起公用流请求与 SSE 解析助手，传递双消息角色，提高生成质量与输出格式稳定性
-    return await createQwenChatStream([
+    return await createAIChatStream([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
     ], {

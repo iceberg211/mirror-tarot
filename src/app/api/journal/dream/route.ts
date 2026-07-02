@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createQwenJsonCompletion } from '@/lib/ai/qwen';
+import { createAIJsonCompletion } from '@/lib/ai/client';
 import { AI_PROMPT_VERSIONS, buildDreamSystemPrompt, buildDreamUserPrompt } from '@/lib/ai/prompts';
 
 interface DreamAnalysisResult {
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
 
     const systemPrompt = buildDreamSystemPrompt();
     const userPrompt = buildDreamUserPrompt(dreamText.trim());
-    const result = await createQwenJsonCompletion<DreamAnalysisResult>(
+    const result = await createAIJsonCompletion<DreamAnalysisResult>(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },

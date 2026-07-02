@@ -26,7 +26,7 @@ export default function HomeActionPanel({
             开始问牌 ✦ Start Inquiry
           </span>
           <span className="mt-1 block text-[11px] font-serif leading-5 tracking-wide text-gold-muted/72">
-            倾诉你的当下困惑，卡牌会映射出路。
+            写下正在纠结的事，系统会推荐合适牌阵。
           </span>
         </span>
         <span className="flex h-10 w-10 items-center justify-center rounded-full border border-gold/24 text-gold transition-transform duration-300 group-hover:translate-x-0.5">
@@ -45,7 +45,7 @@ export default function HomeActionPanel({
             今日一牌
           </span>
           <span className="mt-1 block text-[9px] font-serif leading-relaxed text-gold-muted/62">
-            抽取今日心智运势与低语
+            看今天适合关注什么
           </span>
         </button>
  
@@ -59,7 +59,7 @@ export default function HomeActionPanel({
             记录梦境
           </span>
           <span className="mt-1 block text-[9px] font-serif leading-relaxed text-gold-muted/62">
-            荣格心理学深度解梦
+            记录梦境，并生成抽牌问题
           </span>
         </button>
       </div>
