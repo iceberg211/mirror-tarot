@@ -11,6 +11,7 @@ import { getSpreadByType } from '@/lib/tarot/spreads';
 import { saveLocalReading } from '@/lib/db/localJournal';
 import { getTodayMoonPhase, getMoonSvgPath } from '@/lib/tarot/moonPhase';
 import { useAudio } from '@/hooks/useAudio';
+import { buildFollowUpSuggestions } from '@/lib/tarot/utils';
 
 function ReadingNewContent() {
   const searchParams = useSearchParams();
@@ -20,6 +21,11 @@ function ReadingNewContent() {
   const mood = searchParams.get('mood') || '平静';
   const spreadType = (searchParams.get('spreadType') || 'three_cards') as SpreadType;
   const isDream = searchParams.get('isDream') === 'true';
+  const readingStyle = searchParams.get('readingStyle') || 'gentle';
+
+  const dreamAnalysis = searchParams.get('dreamAnalysis') || '';
+  const dreamMetaphor = searchParams.get('dreamMetaphor') || '';
+  const dreamQuestion = searchParams.get('dreamQuestion') || '';
 
   const customPosString = searchParams.get('customPositions') || '';
   const customPositions = useMemo(
@@ -179,14 +185,6 @@ function ReadingNewContent() {
       sessionStorage.removeItem('mirror_tarot_session');
     }
 
-    const defaultSuggestions = [
-      '结合我的感情问题解释',
-      '结合我的职业问题解释',
-      '我是不是在自欺欺人？',
-      '给我一个更现实的建议',
-      '这组牌的反面提醒是什么？',
-    ];
-
     // 保存空白占位符日记记录，AI 解读详情在 [id]/page.tsx 中完成流式输出
     const emptyReading: ParsedReading = {
       questionSummary: '',
@@ -202,12 +200,33 @@ function ReadingNewContent() {
       overlookedFactor: '',
       actionAdvice: '',
       gentleReminder: '',
-      followUpSuggestions: defaultSuggestions,
+      followUpSuggestions: buildFollowUpSuggestions({
+        question,
+        spreadType,
+        cards: serverCards,
+      }),
     };
 
-    const journalId = saveLocalReading(question, mood, spreadType, serverCards, emptyReading, isDream);
+    const dreamContext = isDream && dreamAnalysis
+      ? {
+          analysis: dreamAnalysis,
+          metaphor: dreamMetaphor,
+          sourceQuestion: dreamQuestion,
+        }
+      : undefined;
+
+    const journalId = saveLocalReading(
+      question,
+      mood,
+      spreadType,
+      serverCards,
+      emptyReading,
+      isDream,
+      readingStyle,
+      dreamContext
+    );
     if (journalId) {
-      router.push(`/reading/${journalId}?trigger=true`);
+      router.push(`/reading/${journalId}?trigger=true&readingStyle=${readingStyle}`);
     } else {
       setSaveError('保存情绪日记失败，请确保本地存储可用且未满。');
     }

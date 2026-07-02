@@ -22,6 +22,65 @@ export const defaultSuggestions = [
   '这组牌的反面提醒是什么？',
 ];
 
+function uniqueSuggestions(items: string[]): string[] {
+  const result: string[] = [];
+  items.forEach((item) => {
+    if (item && !result.includes(item)) result.push(item);
+  });
+  return result.slice(0, 5);
+}
+
+export function buildFollowUpSuggestions(input: {
+  question: string;
+  spreadType?: string;
+  cards: SelectedCard[];
+  reading?: ParsedReading;
+}): string[] {
+  const question = input.question.toLowerCase();
+  const mainCard = input.cards[0];
+  const mainCardName = mainCard?.zhName || '主牌';
+  const orientationText = mainCard?.orientation === 'reversed' ? '逆位' : '正位';
+  const actionAdvice = input.reading?.actionAdvice?.trim();
+
+  const suggestions: string[] = [];
+
+  if (question.includes('梦') || input.spreadType === 'shadow') {
+    suggestions.push(
+      `这个梦和「${mainCardName}」有什么关系？`,
+      '梦里最值得留意的情绪是什么？'
+    );
+  }
+
+  if (question.includes('关系') || question.includes('感情') || input.spreadType === 'relationship') {
+    suggestions.push(
+      `这张${orientationText}的「${mainCardName}」在关系里提醒什么？`,
+      '我应该主动靠近，还是先观察？'
+    );
+  }
+
+  if (question.includes('工作') || question.includes('职业') || question.includes('项目') || input.spreadType === 'career') {
+    suggestions.push(
+      `「${mainCardName}」对我的工作选择有什么提醒？`,
+      '现在最该先处理哪一步？'
+    );
+  }
+
+  if (question.includes('选择') || question.includes('抉择') || input.spreadType === 'choice') {
+    suggestions.push(
+      '如果我选择 A，最需要注意什么？',
+      '如果我选择 B，最需要注意什么？'
+    );
+  }
+
+  suggestions.push(
+    `为什么这次会抽到「${mainCardName}」？`,
+    actionAdvice ? '把行动建议拆成今天能做的一步' : '给我一个今天能做的小行动',
+    '这组牌最现实的提醒是什么？'
+  );
+
+  return uniqueSuggestions([...suggestions, ...defaultSuggestions]);
+}
+
 export function parseStreamingReading(
   text: string,
   cardCountOrCards: number | SelectedCard[]
@@ -75,6 +134,16 @@ export function parseStreamingReading(
       orientation: cards[index]?.orientation || 'upright',
       interpretation: body,
     })),
-    followUpSuggestions: isArray ? defaultSuggestions : [],
+    followUpSuggestions: isArray
+      ? buildFollowUpSuggestions({
+          question: '',
+          cards,
+          reading: {
+            ...sections,
+            cardReadings: [],
+            followUpSuggestions: [],
+          },
+        })
+      : [],
   };
 }

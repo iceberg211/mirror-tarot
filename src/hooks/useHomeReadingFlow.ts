@@ -7,8 +7,6 @@ import { moodConfigs } from '@/lib/tarot/moods';
 import { useAudio } from '@/hooks/useAudio';
 import {
   getLocalReadings,
-  updateActionSeedStatus,
-  getLocalDateString,
   JournalEntry,
 } from '@/lib/db/localJournal';
 import { getTodayMoonPhase } from '@/lib/tarot/moonPhase';
@@ -22,7 +20,6 @@ export const questionTemplates = [
 ];
 
 export type HomeSection = 'overview' | 'inquiry';
-export type ActionSeedStatus = 'completed' | 'failed' | 'dismissed';
 
 export function recommendSpreadForQuestion(question: string, dreamMode = false): SpreadType {
   const normalized = question.toLowerCase();
@@ -58,8 +55,6 @@ export function useHomeReadingFlow() {
   const [showDreamModal, setShowDreamModal] = useState(false);
   const [error, setError] = useState('');
   const [isDream, setIsDream] = useState(false);
-  const [pendingSeedEntry, setPendingSeedEntry] = useState<JournalEntry | null>(null);
-  const [recapFeedback, setRecapFeedback] = useState('');
   const [moonPhase] = useState(() => getTodayMoonPhase());
   const [homeSnapshot] = useState(() => {
     const readings = getLocalReadings();
@@ -68,16 +63,6 @@ export function useHomeReadingFlow() {
       latestEntry: readings[0] || null,
     };
   });
-
-  React.useEffect(() => {
-    const readings = getLocalReadings();
-    const todayStr = getLocalDateString();
-    const found = readings.find((entry) => entry.actionSeed?.status === 'pending');
-    if (found?.actionSeed && found.actionSeed.date !== todayStr) {
-      const timer = window.setTimeout(() => setPendingSeedEntry(found), 0);
-      return () => window.clearTimeout(timer);
-    }
-  }, []);
 
   const selectedMoodConfig = useMemo(
     () => moodConfigs.find((mood) => mood.id === selectedMood) || moodConfigs[0],
@@ -180,24 +165,6 @@ export function useHomeReadingFlow() {
     router.push(`/reading/new?${params.toString()}`);
   };
 
-  const handleRecapCheckIn = (status: ActionSeedStatus) => {
-    if (!pendingSeedEntry) return;
-    updateActionSeedStatus(pendingSeedEntry.id, status);
-
-    if (status === 'completed') {
-      setRecapFeedback('知行合一，昨日的提醒已经进入现实。');
-    } else if (status === 'failed') {
-      setRecapFeedback('没有关系，能看见它，本身就是一次整理。');
-    } else {
-      setRecapFeedback('顺应当下，保留这颗种子，等待更合适的时刻。');
-    }
-
-    window.setTimeout(() => {
-      setPendingSeedEntry(null);
-      setRecapFeedback('');
-    }, 1800);
-  };
-
   return {
     activeSection,
     question,
@@ -216,9 +183,6 @@ export function useHomeReadingFlow() {
     error,
     setError,
     isDream,
-    pendingSeedEntry,
-    setPendingSeedEntry,
-    recapFeedback,
     entryCount: homeSnapshot.entryCount,
     latestEntry: homeSnapshot.latestEntry,
     moonPhase,
@@ -231,6 +195,5 @@ export function useHomeReadingFlow() {
     handleCustomCardCountChange,
     handleCustomPositionChange,
     handleStart,
-    handleRecapCheckIn,
   };
 }

@@ -6,7 +6,6 @@ import DreamJournalModal from '@/components/journal/DreamJournalModal';
 import HomeHero from '@/components/home/HomeHero';
 import HomeInquiryForm from '@/components/home/HomeInquiryForm';
 import HomeMoonModal from '@/components/home/HomeMoonModal';
-import HomeSeedRecapModal from '@/components/home/HomeSeedRecapModal';
 import { useHomeReadingFlow } from '@/hooks/useHomeReadingFlow';
 
 export default function HomePage() {
@@ -24,7 +23,6 @@ export default function HomePage() {
             onDailyDraw={flow.handleDailyDraw}
             onOpenDream={flow.openDreamModal}
             onMoonResonate={flow.handleMoonResonate}
-            entryCount={flow.entryCount}
             latestEntry={flow.latestEntry}
           />
         ) : (
@@ -59,15 +57,6 @@ export default function HomePage() {
         <HomeMoonModal
           moonPhase={flow.moonPhase}
           onClose={() => flow.setShowMoonModal(false)}
-        />
-      )}
-
-      {flow.pendingSeedEntry && (
-        <HomeSeedRecapModal
-          entry={flow.pendingSeedEntry}
-          feedback={flow.recapFeedback}
-          onCheckIn={flow.handleRecapCheckIn}
-          onDismiss={() => flow.setPendingSeedEntry(null)}
         />
       )}
 

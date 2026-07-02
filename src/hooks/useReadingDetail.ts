@@ -9,13 +9,20 @@ import {
   JournalEntry,
   syncJournalData,
   toggleStarReading,
-  updateChatHistory
+  updateChatHistory,
+  getHistoricalContextForAI,
+  getPersonalDataSummary,
+  generateCacheKey,
+  getCachedReading,
+  getCachedRawText,
+  setCachedReading
 } from '@/lib/db/localJournal';
 import { useAudio } from '@/hooks/useAudio';
+import { AI_PROMPT_VERSIONS } from '@/lib/ai/prompts';
 import { useAuth } from '@/hooks/useAuth';
 import { useThrottledStreamText } from '@/hooks/useThrottledStreamText';
 import { ParsedReading } from '@/lib/tarot/types';
-import { getCardElement, parseStreamingReading, defaultSuggestions } from '@/lib/tarot/utils';
+import { buildFollowUpSuggestions, getCardElement, parseStreamingReading } from '@/lib/tarot/utils';
 import { saveUserOnboardingState } from '@/lib/auth/profile';
 import { saveLocalOnboardingState, OnboardingState } from '@/lib/product/onboarding';
 
@@ -151,17 +158,64 @@ export function useReadingDetail(id: string, trigger: boolean) {
       generationAbortRef.current = controller;
     }
 
+    const cacheKey = generateCacheKey(
+      AI_PROMPT_VERSIONS.reading,
+      entry.question,
+      entry.mood,
+      entry.spreadType,
+      entry.cards
+    );
+
+    // 检查缓存命中
+    const cachedRawText = getCachedRawText(cacheKey);
+    const cachedReading = getCachedReading(cacheKey);
+
+    if (cachedRawText && cachedReading) {
+      setGenerating(true);
+      resetReadingText();
+      setReadingError(null);
+      playAmbient();
+
+      if (trigger) {
+        router.replace(`/reading/${entry.id}`, { scroll: false });
+      }
+
+      let currentIdx = 0;
+      const step = Math.max(12, Math.floor(cachedRawText.length / 50)); // ~2-3秒快速模拟吐字回放
+
+      const interval = setInterval(() => {
+        currentIdx += step;
+        if (currentIdx >= cachedRawText.length) {
+          clearInterval(interval);
+          setReadingTextImmediate(cachedRawText);
+
+          const ok = updateLocalReading(entry.id, cachedReading);
+          stopAmbient();
+          if (ok) {
+            setEntry((prev) => (prev ? { ...prev, reading: cachedReading } : null));
+          }
+          setGenerating(false);
+        } else {
+          setReadingTextImmediate(cachedRawText.slice(0, currentIdx));
+        }
+      }, 25);
+
+      return;
+    }
+
     setGenerating(true);
-    resetReadingText('');
+    resetReadingText();
     setReadingError(null);
     playAmbient();
 
-    // 提前移除 URL 中的 trigger 参数，防止后续干扰
     if (trigger) {
       router.replace(`/reading/${entry.id}`, { scroll: false });
     }
 
     try {
+      const personalSummary = getPersonalDataSummary();
+      const historyContextPayload = personalSummary || getHistoricalContextForAI(entry.id);
+
       const response = await fetch('/api/reading', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -170,6 +224,8 @@ export function useReadingDetail(id: string, trigger: boolean) {
           mood: entry.mood,
           spreadType: entry.spreadType,
           cards: entry.cards,
+          style: entry.readingStyle || 'gentle',
+          historyContext: historyContextPayload,
         }),
         signal: requestSignal,
       });
@@ -208,11 +264,22 @@ export function useReadingDetail(id: string, trigger: boolean) {
         throw new Error('AI 生成的指引信息过短或不完整，请重试');
       }
 
-      const finalReading = parseStreamingReading(text, entry.cards);
+      const parsed = parseStreamingReading(text, entry.cards);
+      const finalReading = {
+        ...parsed,
+        followUpSuggestions: buildFollowUpSuggestions({
+          question: entry.question,
+          spreadType: entry.spreadType,
+          cards: entry.cards,
+          reading: parsed,
+        }),
+      };
       const ok = updateLocalReading(entry.id, finalReading);
       stopAmbient();
       
       if (ok) {
+        // 缓存结果
+        setCachedReading(cacheKey, AI_PROMPT_VERSIONS.reading, text, finalReading);
         setEntry((prev) => (prev ? { ...prev, reading: finalReading } : null));
         markOnboarding({ firstReadingCompleted: true });
       } else {
@@ -225,7 +292,6 @@ export function useReadingDetail(id: string, trigger: boolean) {
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') {
-        flushReadingText();
         stopAmbient();
         setGenerating(false);
         if (controller && generationAbortRef.current === controller) {
@@ -310,6 +376,9 @@ export function useReadingDetail(id: string, trigger: boolean) {
       // 先插入一条空的 assistant 消息
       setChatMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
 
+      const personalSummary = getPersonalDataSummary();
+      const historyContextPayload = personalSummary || getHistoricalContextForAI(entry.id);
+
       const response = await fetch('/api/reading/follow-up', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -323,6 +392,8 @@ export function useReadingDetail(id: string, trigger: boolean) {
             `\n\n# CONTRADICTION\n${entry.reading.contradiction}\n\n# OVERLOOKED_FACTOR\n${entry.reading.overlookedFactor}\n\n# ACTION_ADVICE\n${entry.reading.actionAdvice}\n\n# GENTLE_REMINDER\n${entry.reading.gentleReminder}`,
           chatHistory: chatMessages,
           newQuestion: inputText.trim(),
+          style: entry.readingStyle || 'gentle',
+          historyContext: historyContextPayload,
         }),
       });
 
@@ -435,6 +506,13 @@ export function useReadingDetail(id: string, trigger: boolean) {
     activeFocusIndex,
     formattedDate,
     isReadingEmpty: entry ? isReadingEmpty(entry.reading) : true,
-    defaultSuggestions
+    defaultSuggestions: entry
+      ? buildFollowUpSuggestions({
+          question: entry.question,
+          spreadType: entry.spreadType,
+          cards: entry.cards,
+          reading: parsedReading || undefined,
+        })
+      : []
   };
 }

@@ -1,8 +1,8 @@
 import { SelectedCard } from '../tarot/types';
 
 export const AI_PROMPT_VERSIONS = {
-  reading: 'reading-v2.0.0',
-  followUp: 'follow-up-v1.0.0',
+  reading: 'reading-v2.1.0',
+  followUp: 'follow-up-v1.1.0',
   dream: 'dream-v1.1.0',
   monthlyReport: 'monthly-report-v1.0.0',
 } as const;
@@ -10,12 +10,18 @@ export const AI_PROMPT_VERSIONS = {
 /**
  * 组装 AI 解读 System Prompt (全局人设与格式规范)
  */
-export function buildReadingSystemPrompt(cardCount: number): string {
+export function buildReadingSystemPrompt(cardCount: number, style = 'gentle'): string {
   const cardReadingsTemplate = Array.from({ length: cardCount })
     .map((_, idx) => `# CARD_READING_${idx + 1}
 [位置位置名] ✦ [卡牌中文名] ([正位/逆位])
 [深度解读象征意与当前情绪、处境的折射，字数控制在 80-120 字。语气要温暖、客观，避开套话。]`)
     .join('\n\n');
+
+  const styleGuide = style === 'direct'
+    ? '表达更直接，先说清判断，再给温和解释；不要尖锐，不要压迫用户。'
+    : style === 'deep'
+      ? '表达更深入，允许多一点心理机制分析，但仍要自然、克制、好懂。'
+      : '表达温和清楚，把复杂感受说成人能马上理解的话。';
 
   return `你是一位温和、睿智、洞察力敏锐的 Mirror Tarot AI 情绪分析师。
 
@@ -24,7 +30,8 @@ export function buildReadingSystemPrompt(cardCount: number): string {
 在解读时，请严格遵守以下守则：
 1. 语气：温和、真诚、充满觉察感，像一封写给用户的信。不要有神棍气，不要故弄玄虚。避免生硬的机械翻译腔（例如不要写“正如XX牌所指出的那样，代表了你……”、“这张逆位牌象征着……”这种照本宣科的照镜子式解牌）。用极其自然、现代大白的口吻与用户平等沟通，将象征意自然融合在情绪和现实处境分析中。
 2. 禁忌：不要下断言（不要说“你一定会”、“命中注定”、“百分百”），不要制造恐惧，不要代用户做决定。
-3. 结构：必须严格按照规定的块格式输出，每个块以 '#' 开头，块名大写。不要输出任何前言、后记或解释性 Markdown 框，只直接输出格式内容。
+3. 风格：${styleGuide}
+4. 结构：必须严格按照规定的块格式输出，每个块以 '#' 开头，块名大写。不要输出任何前言、后记或解释性 Markdown 框，只直接输出格式内容。
 
 输出格式模板（必须完全对齐以下 '#' 标记，# SUMMARY 必须是第一个字符）：
 
@@ -54,7 +61,8 @@ export function buildReadingUserPrompt(
   mood: string,
   spreadName: string,
   cardsWithMeanings: { card: SelectedCard; meaning: { general: string; love: string; career: string; advice: string } }[],
-  isLateNight = false
+  isLateNight = false,
+  historyContext = ''
 ): string {
   const cardsContext = cardsWithMeanings
     .map((item, idx) => {
@@ -101,7 +109,7 @@ ${cardsContext}
 【选择的塔罗牌阵】
 “ ${spreadName} ”
 
-【本次抽到的卡牌详情】
+${historyContext ? `${historyContext}\n\n` : ''}【本次抽到的卡牌详情】
 ${cardsContext}${lateNightPrompt}
 
 请直接输出解读正文，严格遵守 System 设定的输出块格式规范，不要有任何多余的 Markdown 或解释。`;
@@ -110,7 +118,13 @@ ${cardsContext}${lateNightPrompt}
 /**
  * 组装 AI 追问 System Prompt (全局追问规则)
  */
-export function buildFollowUpSystemPrompt(): string {
+export function buildFollowUpSystemPrompt(style = 'gentle'): string {
+  const styleGuide = style === 'direct'
+    ? '回答可以更直接，但必须保留尊重和选择空间。'
+    : style === 'deep'
+      ? '回答可以更深入地解释心理机制，但不要变成长篇课程。'
+      : '回答要温和、清楚、接地气。';
+
   return `你是一位温和、睿智、洞察力敏锐的 Mirror Tarot AI 情绪分析师。
 
 用户正针对一次先前的塔罗牌解读进行追问。你必须基于原始问题、牌阵、抽到的牌以及已有的对话历史进行简明、接地气且富有温度的回应。
@@ -119,7 +133,8 @@ export function buildFollowUpSystemPrompt(): string {
 1. 语气：像一位有智慧、懂心理学的老朋友，温和、平等、客观，切忌长篇大论或机械地分点罗列。
 2. 字数：回答内容要紧凑，字数严格控制在 150-250 字之间。
 3. 规则：基于之前已抽出的卡牌逻辑进行延展探讨，千万不要自己重新抽牌，也不要无中生有编造新的牌面。
-4. 结尾：回答的末尾，必须给出一个极其细微的、现实可执行的微小行动建议，帮助他在当下打破情绪的内耗。`;
+4. 风格：${styleGuide}
+5. 结尾：回答的末尾，必须给出一个极其细微的、现实可执行的微小行动建议，帮助他在当下打破情绪的内耗。`;
 }
 
 /**
@@ -132,7 +147,8 @@ export function buildFollowUpUserPrompt(
   cards: SelectedCard[],
   previousReading: string,
   chatHistory: { role: 'user' | 'assistant'; content: string }[],
-  newQuestion: string
+  newQuestion: string,
+  historyContext = ''
 ): string {
   const cardsSummary = cards
     .map((c) => `${c.positionName}: ${c.zhName} (${c.orientation === 'upright' ? '正位' : '逆位'})`)
@@ -156,7 +172,7 @@ ${spreadName}
 【当时抽中的卡牌】
 ${cardsSummary}
 
-【首轮情绪解读记录】
+${historyContext ? `${historyContext}\n\n` : ''}【首轮情绪解读记录】
 ${previousReading}
 
 【之前的对话历史】

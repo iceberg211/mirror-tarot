@@ -27,6 +27,13 @@ export interface JournalEntry {
   chatHistory?: ChatMessage[];
   isStarred?: boolean;
   actionSeed?: ActionSeed;
+  userNotes?: string;
+  readingStyle?: string;
+  dreamContext?: {
+    analysis: string;
+    metaphor: string;
+    sourceQuestion: string;
+  };
 }
 
 
@@ -61,6 +68,13 @@ interface CloudReadingPayload extends ParsedReading {
   _chatHistory?: ChatMessage[];
   _isStarred?: boolean;
   _actionSeed?: ActionSeed;
+  _userNotes?: string;
+  _readingStyle?: string;
+  _dreamContext?: {
+    analysis: string;
+    metaphor: string;
+    sourceQuestion: string;
+  };
 }
 
 interface CloudCheckInRow {
@@ -332,6 +346,9 @@ function saveAndSyncEntry(entry: JournalEntry, readings: JournalEntry[]): void {
           _chatHistory: entry.chatHistory,
           _isStarred: entry.isStarred,
           _actionSeed: entry.actionSeed,
+          _userNotes: entry.userNotes,
+          _readingStyle: entry.readingStyle,
+          _dreamContext: entry.dreamContext,
         },
         created_at: entry.createdAt,
         is_dream: entry.isDream || false
@@ -348,7 +365,13 @@ export function saveLocalReading(
   spreadType: SpreadType,
   cards: SelectedCard[],
   reading: ParsedReading,
-  isDream?: boolean
+  isDream?: boolean,
+  readingStyle?: string,
+  dreamContext?: {
+    analysis: string;
+    metaphor: string;
+    sourceQuestion: string;
+  }
 ): string {
   if (typeof window === 'undefined') return '';
 
@@ -376,6 +399,9 @@ export function saveLocalReading(
     createdAt: new Date().toISOString(),
     isDream,
     actionSeed,
+    userNotes: '',
+    readingStyle,
+    dreamContext,
   };
 
   try {
@@ -856,6 +882,9 @@ export async function syncJournalData(): Promise<boolean> {
         _chatHistory: chatHistory,
         _isStarred: isStarred,
         _actionSeed: actionSeed,
+        _userNotes: userNotes,
+        _readingStyle: readingStyle,
+        _dreamContext: dreamContext,
         ...cleanReading
       } = r.reading;
 
@@ -871,6 +900,9 @@ export async function syncJournalData(): Promise<boolean> {
         chatHistory,
         isStarred,
         actionSeed,
+        userNotes,
+        readingStyle,
+        dreamContext,
       };
     });
 
@@ -924,6 +956,9 @@ export async function syncJournalData(): Promise<boolean> {
           _chatHistory: r.chatHistory,
           _isStarred: r.isStarred,
           _actionSeed: r.actionSeed,
+          _userNotes: r.userNotes,
+          _readingStyle: r.readingStyle,
+          _dreamContext: r.dreamContext,
         },
         created_at: r.createdAt,
         is_dream: r.isDream || false,
@@ -978,11 +1013,222 @@ export async function migrateGuestDataToUser(userId: string): Promise<boolean> {
 
   setActiveUserId(userId);
   writeUserStorageSnapshot(userId, mergedSnapshot);
-
   const syncOk = await syncJournalData();
   if (syncOk) {
     clearGuestStorage();
   }
 
   return syncOk;
+}
+
+export function updateJournalUserNotes(id: string, userNotes: string): boolean {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const readings = getLocalReadings();
+    const index = readings.findIndex((r) => r.id === id);
+    if (index === -1) return false;
+
+    const entry = readings[index];
+    entry.userNotes = userNotes;
+    
+    saveAndSyncEntry(entry, readings);
+    return true;
+  } catch (e) {
+    console.error('Failed to update journal user notes:', e);
+    return false;
+  }
+}
+
+export function getHistoricalContextForAI(currentId?: string): string {
+  if (typeof window === 'undefined') return '';
+
+  try {
+    const readings = getLocalReadings();
+    const filtered = readings.filter(
+      (r) => r.id !== currentId && r.reading && r.reading.intuitiveSummary
+    );
+    
+    const recent = filtered.slice(0, 3);
+    if (recent.length === 0) return '';
+
+    const lines = recent.map((r) => {
+      const dateStr = new Date(r.createdAt).toLocaleDateString('zh-CN', {
+        month: 'numeric',
+        day: 'numeric',
+      });
+      const cardsStr = r.cards.map((c) => `${c.zhName}(${c.orientation === 'upright' ? '正位' : '逆位'})`).join('、');
+      const seedStr = r.actionSeed ? `，行动建议是：“${r.actionSeed.seedText}”（状态：${r.actionSeed.status}）` : '';
+      const notesStr = r.userNotes ? `，用户整理笔记：“${r.userNotes}”` : '';
+      
+      return `- ${dateStr} 问了：“${r.question}”，抽到：[${cardsStr}]。AI总结：“${r.reading.intuitiveSummary}”${seedStr}${notesStr}`;
+    });
+
+    return `【用户近期测算历史与觉察心境】\n${lines.join('\n')}\n（说明：请在本次解读中根据上下文自然地提及用户的近期状态或前情回响，让用户感到长期陪伴的连续性，不要说重复的建议）`;
+  } catch (e) {
+    console.error('Failed to get historical context for AI:', e);
+    return '';
+  }
+}
+
+// ==========================================
+// 个人心智画像与本地 AI 解读缓存 (P5 优化)
+// ==========================================
+
+export function getPersonalDataSummary(): string {
+  try {
+    const readings = getLocalReadings();
+    // 仅分析最近 30 天的记录
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const recentReadings = readings.filter(
+      (r) => new Date(r.createdAt) >= thirtyDaysAgo && r.reading && r.reading.intuitiveSummary
+    );
+    
+    if (recentReadings.length < 3) return '';
+    
+    // 1. 统计高频卡牌
+    const cardCounts: Record<string, { name: string; count: number }> = {};
+    recentReadings.forEach((r) => {
+      r.cards.forEach((c) => {
+        if (!cardCounts[c.id]) {
+          cardCounts[c.id] = { name: c.zhName, count: 0 };
+        }
+        cardCounts[c.id].count++;
+      });
+    });
+    
+    const topCards = Object.values(cardCounts)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3)
+      .map((c) => `『${c.name}』(共出现${c.count}次)`)
+      .join('、');
+      
+    // 2. 统计高频情绪
+    const moodCounts: Record<string, number> = {};
+    recentReadings.forEach((r) => {
+      moodCounts[r.mood] = (moodCounts[r.mood] || 0) + 1;
+    });
+    const topMoods = Object.entries(moodCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map((m) => `「${m[0]}」`)
+      .join('、');
+      
+    // 3. 提取最近的主题
+    const recentQuestions = recentReadings
+      .slice(0, 3)
+      .map((r) => `“${r.question}”`)
+      .join('；');
+      
+    return `# USER_HISTORY_PROFILE
+【用户近期心智画像摘要】
+- 最近30天测算频次：已累计进行 ${recentReadings.length} 次自我分析与读牌。
+- 潜意识高频卡牌：${topCards || '无特殊高频牌'}。
+- 常见情绪波动：主要处于 ${topMoods || '平稳'} 心境。
+- 最近聚焦的主题议题：${recentQuestions}。
+（提示：请结合以上用户的近期画像背景进行本次情绪指引，在本次回复的措辞语气及分析侧重点中，含蓄地呼应TA最近的挣扎或成长趋势，但不要说教，保持深度的倾听同理心）`;
+  } catch (e) {
+    console.error('Failed to generate personal data summary:', e);
+    return '';
+  }
+}
+
+export interface AIResultCacheEntry {
+  cacheKey: string;
+  promptVersion: string;
+  rawText: string;
+  parsedReading: ParsedReading;
+  createdAt: string;
+  expiresAt: string;
+}
+
+const CACHE_STORAGE_KEY = 'mirror_tarot_ai_cache';
+const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+export function generateCacheKey(
+  promptVersion: string,
+  question: string,
+  mood: string,
+  spreadType: string,
+  cards: SelectedCard[]
+): string {
+  const cardStr = [...cards]
+    .sort((a, b) => a.positionOrder - b.positionOrder)
+    .map((c) => `${c.id}:${c.orientation}`)
+    .join(',');
+  return `${promptVersion}|${question.trim()}|${mood}|${spreadType}|${cardStr}`;
+}
+
+export function getCachedReading(key: string): ParsedReading | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const cacheDataStr = localStorage.getItem(CACHE_STORAGE_KEY);
+    if (!cacheDataStr) return null;
+    const cache: Record<string, AIResultCacheEntry> = JSON.parse(cacheDataStr);
+    const entry = cache[key];
+    if (!entry) return null;
+    
+    if (new Date().getTime() > new Date(entry.expiresAt).getTime()) {
+      delete cache[key];
+      localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(cache));
+      return null;
+    }
+    return entry.parsedReading;
+  } catch (e) {
+    console.error('Failed to get cached reading:', e);
+    return null;
+  }
+}
+
+export function getCachedRawText(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const cacheDataStr = localStorage.getItem(CACHE_STORAGE_KEY);
+    if (!cacheDataStr) return null;
+    const cache: Record<string, AIResultCacheEntry> = JSON.parse(cacheDataStr);
+    const entry = cache[key];
+    if (!entry) return null;
+    
+    if (new Date().getTime() > new Date(entry.expiresAt).getTime()) {
+      return null;
+    }
+    return entry.rawText;
+  } catch {
+    return null;
+  }
+}
+
+export function setCachedReading(
+  key: string,
+  promptVersion: string,
+  rawText: string,
+  parsedReading: ParsedReading
+): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const cacheDataStr = localStorage.getItem(CACHE_STORAGE_KEY) || '{}';
+    const cache: Record<string, AIResultCacheEntry> = JSON.parse(cacheDataStr);
+    
+    // 清理过期数据以防止溢出
+    const nowMs = new Date().getTime();
+    Object.keys(cache).forEach((k) => {
+      if (nowMs > new Date(cache[k].expiresAt).getTime()) {
+        delete cache[k];
+      }
+    });
+    
+    cache[key] = {
+      cacheKey: key,
+      promptVersion,
+      rawText,
+      parsedReading,
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(nowMs + CACHE_EXPIRY_MS).toISOString(),
+    };
+    
+    localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    console.error('Failed to set cached reading:', e);
+  }
 }

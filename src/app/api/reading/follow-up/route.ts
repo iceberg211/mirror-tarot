@@ -3,7 +3,17 @@ import { AI_PROMPT_VERSIONS, buildFollowUpSystemPrompt, buildFollowUpUserPrompt 
 
 export async function POST(req: Request) {
   try {
-    const { question, mood, spreadName, cards, previousReading, chatHistory, newQuestion } = await req.json();
+    const {
+      question,
+      mood,
+      spreadName,
+      cards,
+      previousReading,
+      chatHistory,
+      newQuestion,
+      style = 'gentle',
+      historyContext = '',
+    } = await req.json();
 
     if (!question || !cards || !previousReading || !newQuestion) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
@@ -12,7 +22,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const systemPrompt = buildFollowUpSystemPrompt();
+    const systemPrompt = buildFollowUpSystemPrompt(style);
     const userPrompt = buildFollowUpUserPrompt(
       question,
       mood,
@@ -20,7 +30,8 @@ export async function POST(req: Request) {
       cards,
       previousReading,
       chatHistory || [],
-      newQuestion
+      newQuestion,
+      historyContext
     );
 
     // 调起公用流请求，传递双角色设定，确保 AI 保持客观睿智和字数约束

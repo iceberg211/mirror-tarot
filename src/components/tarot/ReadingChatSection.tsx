@@ -39,24 +39,27 @@ export default function ReadingChatSection({
       {/* 对话列表 */}
       {chatMessages.length > 0 && (
         <div className="flex flex-col gap-3.5 max-h-[300px] overflow-y-auto pr-1 no-scrollbar">
-          {chatMessages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`flex flex-col gap-1 max-w-[85%] ${
-                msg.role === 'user' ? 'self-end items-end' : 'self-start items-start'
-              }`}
-            >
+          {chatMessages.map((msg, idx) => {
+            if (msg.role === 'assistant' && !msg.content) return null;
+            return (
               <div
-                className={`p-3 rounded-2xl text-xs font-serif leading-relaxed tracking-wide ${
-                  msg.role === 'user'
-                    ? 'bg-[#1E1C16] border border-gold/20 text-gold rounded-tr-none'
-                    : 'bg-card border border-gold/5 text-foreground/90 rounded-tl-none'
+                key={idx}
+                className={`flex flex-col gap-1 max-w-[85%] ${
+                  msg.role === 'user' ? 'self-end items-end' : 'self-start items-start'
                 }`}
               >
-                {msg.content}
+                <div
+                  className={`p-3 rounded-2xl text-xs font-serif leading-relaxed tracking-wide ${
+                    msg.role === 'user'
+                      ? 'bg-[#1E1C16] border border-gold/20 text-gold rounded-tr-none'
+                      : 'bg-card border border-gold/5 text-foreground/90 rounded-tl-none'
+                  }`}
+                >
+                  {msg.content}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {chatLoading && (
             <div className="self-start max-w-[85%] flex flex-col items-start">
               <div className="p-3 rounded-2xl bg-card border border-gold/5 text-xs font-serif text-gold-muted/40 animate-pulse rounded-tl-none">

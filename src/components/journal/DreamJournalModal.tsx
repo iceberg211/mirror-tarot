@@ -63,8 +63,11 @@ export default function DreamJournalModal({ onClose }: DreamJournalModalProps) {
     const params = new URLSearchParams({
       question: `[梦境] ${analysisResult.questionForSubconscious}`,
       mood: '平静',
-      spreadType: 'one_card',
+      spreadType: 'shadow',
       isDream: 'true',
+      dreamAnalysis: analysisResult.dreamAnalysis,
+      dreamMetaphor: analysisResult.tarotMetaphor,
+      dreamQuestion: analysisResult.questionForSubconscious,
     });
 
     onClose();

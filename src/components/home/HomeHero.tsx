@@ -3,7 +3,7 @@
 import React from 'react';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
-import { BookOpen, UserRound } from 'lucide-react';
+import { BookOpen, UserRound, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { MoonPhaseInfo, getMoonSvgPath } from '@/lib/tarot/moonPhase';
 import { JournalEntry } from '@/lib/db/localJournal';
@@ -16,7 +16,6 @@ interface HomeHeroProps {
   onDailyDraw: () => void;
   onOpenDream: () => void;
   onMoonResonate: () => void;
-  entryCount: number;
   latestEntry: JournalEntry | null;
 }
 
@@ -47,12 +46,10 @@ export default function HomeHero({
   onDailyDraw,
   onOpenDream,
   onMoonResonate,
-  entryCount,
   latestEntry,
 }: HomeHeroProps) {
   const router = useRouter();
   const { status } = useAuth();
-  const hasEntries = entryCount > 0;
 
   return (
     <section className="relative w-full overflow-hidden px-6 pt-6 pb-28">
@@ -107,11 +104,9 @@ export default function HomeHero({
         </motion.div>
 
         <HomeActionPanel
-          latestEntry={hasEntries ? latestEntry : null}
           onStartInquiry={onStartInquiry}
           onDailyDraw={onDailyDraw}
           onOpenDream={onOpenDream}
-          onContinueLatest={(entryId) => router.push(`/reading/${entryId}`)}
         />
 
         <motion.div
@@ -170,6 +165,30 @@ export default function HomeHero({
             月相建议
           </button>
         </motion.div>
+
+        {latestEntry && (
+          <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            type="button"
+            onClick={() => router.push(`/reading/${latestEntry.id}`)}
+            className="mt-4 grid min-h-[58px] w-full grid-cols-[auto_1fr_auto] items-center gap-3.5 rounded-xl border border-gold/10 bg-[#0E1017]/25 p-3.5 text-left transition-all duration-300 hover:border-gold/30 hover:bg-[#0E1017]/45 cursor-pointer"
+          >
+            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-gold/14 text-gold/80">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[9px] font-mono uppercase tracking-[0.2em] text-gold-muted/48">
+                最近觉察记录 ✦ Recent Inquiry
+              </span>
+              <span className="mt-1 block truncate text-xs font-serif tracking-widest text-gold font-medium">
+                “ {latestEntry.question} ”
+              </span>
+            </span>
+            <ArrowRight className="h-4 w-4 text-gold/85" />
+          </motion.button>
+        )}
       </div>
     </section>
   );
