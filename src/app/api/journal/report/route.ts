@@ -31,7 +31,7 @@ interface ReportRequestBody {
 export async function POST(req: Request) {
   try {
     const { checkins = [], readings = [], topCards = [] } = (await req.json()) as ReportRequestBody;
-    const promptText = buildMonthlyReportPrompt({ checkins, readings, topCards });
+    const promptText = await buildMonthlyReportPrompt({ checkins, readings, topCards });
 
     // 一键调起公用流请求与 SSE 解析助手
     return await createAIChatStream([{ role: 'user', content: promptText }], {

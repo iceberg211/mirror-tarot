@@ -2,7 +2,7 @@
 
 import React, { Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Trash2, Calendar, Star, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Trash2, Star, ShieldCheck } from 'lucide-react';
 import ReadingResult from '@/components/tarot/ReadingResult';
 import BottomNav from '@/components/layout/BottomNav';
 import { getSpreadByType } from '@/lib/tarot/spreads';
@@ -13,6 +13,8 @@ import ConstellationLayout from '@/components/tarot/ConstellationLayout';
 import ReadingChatSection from '@/components/tarot/ReadingChatSection';
 import { useAuth } from '@/hooks/useAuth';
 import { saveLocalOnboardingState } from '@/lib/product/onboarding';
+import ReadingSummaryCard from '@/components/tarot/ReadingSummaryCard';
+import ReadingStatusAlert from '@/components/tarot/ReadingStatusAlert';
 
 function ReadingDetailContent() {
   const router = useRouter();
@@ -130,20 +132,12 @@ function ReadingDetailContent() {
       <div className="w-full max-w-md px-6 flex-1 flex flex-col justify-start items-center my-4 z-10">
         
         {/* 问题、情绪和时间摘要 */}
-        <div className="w-full p-4 rounded-xl border border-gold/15 bg-[#0F1117]/60 flex flex-col gap-2.5 mb-6">
-          <div className="flex justify-between items-center text-[10px] text-gold-muted/65 font-serif border-b border-gold/5 pb-2">
-            <div className="flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5" />
-              <span>{formattedDate}</span>
-            </div>
-            <span className="text-gold tracking-widest">
-              {spread?.name} ✦ {entry.mood}
-            </span>
-          </div>
-          <p className="text-xs md:text-sm text-foreground/90 font-serif leading-relaxed tracking-wide font-medium">
-            “ {entry.question} ”
-          </p>
-        </div>
+        <ReadingSummaryCard
+          formattedDate={formattedDate}
+          spreadName={spread?.name}
+          mood={entry.mood}
+          question={entry.question}
+        />
 
         {/* 2D 几何空间星图牌阵排布与能量有向流光连线 */}
         <ConstellationLayout
@@ -160,41 +154,13 @@ function ReadingDetailContent() {
           activeFocusIndex={activeFocusIndex}
         />
 
-        {/* AI 重新解读报错与重试 */}
-        {!generating && readingError && (
-          <div className="w-full max-w-sm px-5 py-4 rounded-xl border border-red-950/45 bg-[#170B0B]/50 flex flex-col gap-3.5 mb-6 text-center shadow-lg" style={{ boxShadow: '0 0 15px rgba(239, 68, 68, 0.1)' }}>
-            <span className="text-[11px] text-red-400 font-serif font-bold tracking-widest">
-              ✦ 情绪解读重建失败 ✦
-            </span>
-            <p className="text-[10px] text-red-300/80 font-mono break-all leading-relaxed px-2">
-              {readingError}
-            </p>
-            <button
-              onClick={() => handleRegenerate()}
-              className="mx-auto px-5 py-2.5 rounded-lg border border-red-800/40 bg-red-950/40 text-[10px] text-red-300 font-serif tracking-widest hover:bg-red-900/40 transition-all duration-300 cursor-pointer"
-            >
-              ✦ 点击重试重建 ✦
-            </button>
-          </div>
-        )}
-
-        {/* 如果是没有解读内容的损坏日记，展示重建按钮 */}
-        {!generating && !readingError && isReadingEmpty && (
-          <div className="w-full max-w-sm px-5 py-4 rounded-xl border border-gold/15 bg-[#11131A]/60 flex flex-col gap-3.5 mb-6 text-center shadow-gold-glow">
-            <span className="text-[11px] text-gold font-serif font-semibold tracking-widest">
-              ✦ 解读信息缺失 ✦
-            </span>
-            <p className="text-[10px] text-gold-muted/70 font-serif leading-relaxed px-2">
-              检测到此篇情绪日记缺少 AI 情绪解读，可能因为之前大模型接口配置有误或中断。
-            </p>
-            <button
-              onClick={() => handleRegenerate()}
-              className="mx-auto px-5 py-2.5 rounded-lg border border-gold/25 bg-gold/5 text-[10px] text-gold font-serif tracking-widest hover:bg-gold/10 transition-all duration-300 cursor-pointer shadow-gold-glow"
-            >
-              ✦ 重新唤醒 MIRROR 情绪解读 ✦
-            </button>
-          </div>
-        )}
+        {/* AI 解读状态警告与重试 */}
+        <ReadingStatusAlert
+          generating={generating}
+          readingError={readingError}
+          isReadingEmpty={isReadingEmpty}
+          onRegenerate={() => handleRegenerate()}
+        />
 
         {/* 生成海报与冥想按钮 */}
         {!generating && !isReadingEmpty && (

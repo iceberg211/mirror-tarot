@@ -98,20 +98,6 @@ export default function AccountPage() {
             )}
           </div>
         </section>
-
-        <section className="border-y border-gold/12 py-5">
-          <p className="text-[10px] font-mono uppercase tracking-[0.26em] text-gold-muted/50">
-            Privacy
-          </p>
-          <h2 className="mt-2 text-base font-serif font-semibold tracking-widest text-gold">
-            数据与隐私
-          </h2>
-          <div className="mt-4 flex flex-col divide-y divide-gold/10 border-y border-gold/10 text-[11px] font-serif text-foreground/75">
-            <p className="py-3">游客记录保存在当前浏览器，不会在未登录时写入 Supabase。</p>
-            <p className="py-3">登录后的云端记录使用账号 ID 隔离，后续长期画像也只读取账号数据。</p>
-            <p className="py-3">出生资料入口暂不开放，星盘和印度占星不会进入首版主流程。</p>
-          </div>
-        </section>
       </div>
 
       <BottomNav />

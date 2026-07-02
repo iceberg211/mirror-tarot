@@ -2,9 +2,9 @@
 
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Info, Flame, AlertCircle, Eye, X, Sparkles, Moon, Compass } from 'lucide-react';
+import { Info, Flame, AlertCircle, Eye } from 'lucide-react';
 import { SelectedCard, ParsedReading } from '@/lib/tarot/types';
-import TarotCard from '@/components/tarot/TarotCard';
+import CardMeaningModal from '@/components/tarot/CardMeaningModal';
 
 interface ReadingResultProps {
   parsedReading: ParsedReading;
@@ -156,9 +156,6 @@ export default function ReadingResult({
 
   // 百科 Modal 状态
   const [modalCard, setModalCard] = useState<SelectedCard | null>(null);
-  const [modalOrientation, setModalOrientation] = useState<'upright' | 'reversed'>('upright');
-  const [modalRevealed, setModalRevealed] = useState(true);
-  const [meaningsModule, setMeaningsModule] = useState<MeaningsModuleType | null>(null);
 
   const tabs = useMemo(() => {
     return TAB_CONFIG.map((tab) => ({
@@ -180,25 +177,9 @@ export default function ReadingResult({
     localStorage.setItem(DETAIL_MODE_STORAGE_KEY, detailMode);
   }, [detailMode]);
 
-  const handleOpenDictionary = async (card: SelectedCard) => {
+  const handleOpenDictionary = (card: SelectedCard) => {
     setModalCard(card);
-    setModalOrientation(card.orientation);
-    setModalRevealed(true);
-
-    if (!meaningsModule) {
-      try {
-        const mod = await import('@/lib/tarot/meanings');
-        setMeaningsModule(mod);
-      } catch (err) {
-        console.error('Failed to load card meanings library dynamically:', err);
-      }
-    }
   };
-
-  const cardMeaning = useMemo(() => {
-    if (!modalCard || !meaningsModule) return null;
-    return meaningsModule.getCardMeaning(modalCard.id, modalOrientation);
-  }, [modalCard, modalOrientation, meaningsModule]);
 
   return (
     <div className="w-full max-w-md px-6 flex flex-col gap-6 select-none pb-12 z-10">
@@ -352,136 +333,10 @@ export default function ReadingResult({
       {/* 详细牌义百科 Modal */}
       <AnimatePresence>
         {modalCard && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#05060A]/85 backdrop-blur-md p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              className="relative w-full max-w-sm rounded-2xl border border-gold/30 bg-[#0F1118]/95 p-5 shadow-gold-glow-lg flex flex-col gap-4 overflow-y-auto max-h-[90vh] no-scrollbar"
-            >
-              {/* 关闭按钮 */}
-              <button
-                onClick={() => setModalCard(null)}
-                className="absolute top-4 right-4 w-7 h-7 rounded-full border border-gold/15 bg-card/40 flex items-center justify-center text-gold/75 hover:border-gold/35 cursor-pointer z-10"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-
-              {/* 卡牌 3D 翻转展示 */}
-              <div className="w-full flex flex-col items-center gap-2 mt-2">
-                <div className="scale-95 shadow-gold-glow">
-                  <TarotCard
-                    card={{
-                      ...modalCard,
-                      positionName: '心智映射',
-                      positionOrder: 1,
-                    }}
-                    revealed={modalRevealed}
-                    size="sm"
-                    onClick={() => setModalRevealed(!modalRevealed)}
-                  />
-                </div>
-                <p className="text-[9px] text-gold-muted/40 font-serif tracking-widest mt-1">
-                  💡 点击卡牌可进行 3D 翻转互动
-                </p>
-              </div>
-
-              {/* 核心牌名与控制栏 */}
-              <div className="flex flex-col items-center text-center border-b border-gold/10 pb-3">
-                <h2 className="text-lg font-serif text-gold font-bold tracking-widest">
-                  {modalCard.zhName}
-                </h2>
-                <span className="text-[10px] text-gold-muted/65 font-mono tracking-wider mt-0.5 uppercase">
-                  {modalCard.name}
-                </span>
-
-                {/* 正逆位快速切换按钮 */}
-                <div className="flex bg-[#07090F] p-0.5 rounded-lg border border-gold/15 mt-3.5 w-full max-w-[180px]">
-                  <button
-                    type="button"
-                    onClick={() => setModalOrientation('upright')}
-                    className={`flex-1 py-1 rounded-md text-[10px] font-serif tracking-widest cursor-pointer outline-none transition-all ${
-                      modalOrientation === 'upright'
-                        ? 'bg-gold/10 text-gold font-semibold'
-                        : 'text-gold-muted/50 hover:text-gold/75'
-                    }`}
-                  >
-                    正位
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModalOrientation('reversed')}
-                    className={`flex-1 py-1 rounded-md text-[10px] font-serif tracking-widest cursor-pointer outline-none transition-all ${
-                      modalOrientation === 'reversed'
-                        ? 'bg-gold/10 text-gold font-semibold'
-                        : 'text-gold-muted/50 hover:text-gold/75'
-                    }`}
-                  >
-                    逆位
-                  </button>
-                </div>
-              </div>
-
-              {/* 各场景牌义详细展开 */}
-              <div className="flex flex-col gap-4 py-1">
-                {!meaningsModule ? (
-                  <div className="py-8 text-center text-xs text-gold-muted/50 font-serif animate-pulse">
-                    ✦ 正在加载牌义指引... ✦
-                  </div>
-                ) : !cardMeaning ? (
-                  <div className="py-8 text-center text-xs text-gold-muted/50 font-serif">
-                    ✦ 牌义信息暂缺 ✦
-                  </div>
-                ) : (
-                  <>
-                    {/* 1. 通用 */}
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[10px] text-gold font-serif tracking-widest uppercase font-semibold flex items-center gap-1.5">
-                        <Sparkles className="w-3 h-3" />
-                        <span>通用启示</span>
-                      </span>
-                      <p className="text-[11px] text-foreground/85 font-serif leading-relaxed tracking-wide font-medium">
-                        {cardMeaning.general}
-                      </p>
-                    </div>
-
-                    {/* 2. 情感 */}
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[10px] text-gold font-serif tracking-widest uppercase font-semibold flex items-center gap-1.5">
-                        <Moon className="w-3 h-3" />
-                        <span>感情与关系</span>
-                      </span>
-                      <p className="text-[11px] text-foreground/85 font-serif leading-relaxed tracking-wide font-medium">
-                        {cardMeaning.love}
-                      </p>
-                    </div>
-
-                    {/* 3. 职业 */}
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[10px] text-gold font-serif tracking-widest uppercase font-semibold flex items-center gap-1.5">
-                        <Compass className="w-3 h-3" />
-                        <span>职业与抉择</span>
-                      </span>
-                      <p className="text-[11px] text-foreground/85 font-serif leading-relaxed tracking-wide font-medium">
-                        {cardMeaning.career}
-                      </p>
-                    </div>
-
-                    {/* 4. 建议 */}
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[10px] text-gold font-serif tracking-widest uppercase font-semibold flex items-center gap-1.5">
-                        <Sparkles className="w-3 h-3" />
-                        <span>行动指引</span>
-                      </span>
-                      <p className="text-[11px] text-foreground/85 font-serif leading-relaxed tracking-wide font-medium">
-                        {cardMeaning.advice}
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
-            </motion.div>
-          </div>
+          <CardMeaningModal
+            card={modalCard}
+            onClose={() => setModalCard(null)}
+          />
         )}
       </AnimatePresence>
     </div>

@@ -54,8 +54,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Dream text is empty' }, { status: 400 });
     }
 
-    const systemPrompt = buildDreamSystemPrompt();
-    const userPrompt = buildDreamUserPrompt(dreamText.trim());
+    const systemPrompt = await buildDreamSystemPrompt();
+    const userPrompt = await buildDreamUserPrompt(dreamText.trim());
     const result = await createAIJsonCompletion<DreamAnalysisResult>(
       [
         { role: 'system', content: systemPrompt },

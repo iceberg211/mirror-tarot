@@ -35,8 +35,8 @@ export async function POST(req: Request) {
     const isLateNight = localHour >= 23 || localHour < 4;
 
     // 生成分离架构的 System 与 User Prompts
-    const systemPrompt = buildReadingSystemPrompt(cards.length, style);
-    const userPrompt = buildReadingUserPrompt(question, mood, spread.name, cardsWithMeanings, isLateNight, historyContext);
+    const systemPrompt = await buildReadingSystemPrompt(cards.length, style);
+    const userPrompt = await buildReadingUserPrompt(question, mood, spread.name, cardsWithMeanings, isLateNight, historyContext);
 
     // 调起公用流请求与 SSE 解析助手，传递双消息角色，提高生成质量与输出格式稳定性
     return await createAIChatStream([

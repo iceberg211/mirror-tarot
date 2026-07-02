@@ -2,16 +2,15 @@
 
 import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Sparkles } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import CardDeck from '@/components/tarot/CardDeck';
-import TarotCard from '@/components/tarot/TarotCard';
+import { ArrowLeft } from 'lucide-react';
 import { SelectedCard, ParsedReading, SpreadType } from '@/lib/tarot/types';
 import { getSpreadByType } from '@/lib/tarot/spreads';
 import { saveLocalReading } from '@/lib/db/localJournal';
-import { getTodayMoonPhase, getMoonSvgPath } from '@/lib/tarot/moonPhase';
+import { getTodayMoonPhase } from '@/lib/tarot/moonPhase';
 import { useAudio } from '@/hooks/useAudio';
 import { buildFollowUpSuggestions } from '@/lib/tarot/utils';
+import DrawInteractiveSection from '@/components/tarot/DrawInteractiveSection';
+import RevealCardSection from '@/components/tarot/RevealCardSection';
 
 function ReadingNewContent() {
   const searchParams = useSearchParams();
@@ -255,99 +254,24 @@ function ReadingNewContent() {
         
         {/* 1. 状态：抽牌交互中 */}
         {step === 'draw' && (
-          <div className="w-full flex-grow flex flex-col justify-center gap-4 my-2">
-            {/* 顶部的今日月相小指引 */}
-            <div className="w-full p-4 rounded-xl border border-gold/10 bg-[#0F1117]/35 flex items-center gap-3.5 select-none">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-b from-[#11131E] to-[#08090E] border border-gold/10 flex items-center justify-center relative overflow-hidden flex-shrink-0">
-                <svg viewBox="0 0 100 100" className="w-6.5 h-6.5 text-gold/85 drop-shadow-[0_0_6px_rgba(201,167,106,0.4)]">
-                  <circle cx="50" cy="50" r="38" className="fill-[#1A1F30]/40 stroke-none" />
-                  <path
-                    d={getMoonSvgPath(moonPhase.iconType, moonPhase.percent)}
-                    className="fill-gold stroke-none"
-                  />
-                </svg>
-              </div>
-              <div className="flex-1 flex flex-col gap-0.5">
-                <span className="text-[9px] text-gold-muted/65 font-mono tracking-widest uppercase">
-                  LUNAR ENERGY ✦ {moonPhase.name}
-                </span>
-                <p className="text-[9px] text-foreground/80 font-serif leading-relaxed tracking-wide">
-                  {moonPhase.advice}
-                </p>
-              </div>
-            </div>
-
-            {spread && (
-              <CardDeck
-                neededCount={spread.positions.length}
-                positions={spread.positions}
-                onComplete={handleDrawComplete}
-              />
-            )}
-          </div>
+          <DrawInteractiveSection
+            moonPhase={moonPhase}
+            spread={spread || null}
+            onDrawComplete={handleDrawComplete}
+          />
         )}
 
         {/* 2. 状态：翻开揭示卡牌 */}
         {step === 'reveal' && (
-          <div className="w-full flex-grow flex flex-col justify-between items-center py-6">
-            <div className="text-center mb-6 flex flex-col items-center gap-2">
-              <h2 className="text-xs text-gold font-serif tracking-widest animate-pulse font-semibold">
-                ✦ 依次翻开卡牌，建立心灵映射 ✦
-              </h2>
-              {!allRevealed && (
-                <button
-                  type="button"
-                  onClick={handleRevealAll}
-                  className="mt-1 text-[9px] text-gold-muted/65 hover:text-gold font-serif tracking-widest border border-gold/12 hover:border-gold/30 bg-gold/5 hover:bg-gold/8 px-2.5 py-1 rounded-full transition-all duration-300 cursor-pointer"
-                >
-                  ✦ 一键快速翻开 ✦
-                </button>
-              )}
-            </div>
-
-            {/* 卡牌平铺展示 */}
-            <div className="flex gap-4 flex-wrap justify-center my-6">
-              {serverCards.map((card, idx) => {
-                const isRevealed = !!revealedStates[idx];
-                return (
-                  <div key={card.id} className="flex flex-col items-center">
-                    <TarotCard
-                      card={card}
-                      revealed={isRevealed}
-                      size="sm"
-                      onClick={() => handleRevealCard(idx)}
-                      className="shadow-gold-glow-lg animate-fadeIn"
-                    />
-                    <span className="text-[10px] text-gold-muted/70 mt-2 tracking-widest font-serif font-medium">
-                      {card.positionName}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* 下方解读触发大按钮 */}
-            <div className="w-full px-4 h-16 flex items-center justify-center mt-6">
-              <AnimatePresence>
-                {allRevealed && (
-                  <motion.button
-                    initial={{ opacity: 0, y: 15 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -15 }}
-                    onClick={handleStartReading}
-                    className="w-full h-12 rounded-xl bg-gradient-to-r from-[#171610] via-[#2E281C] to-[#171610] border border-gold text-gold text-sm font-serif font-semibold tracking-[0.25em] shadow-gold-glow flex items-center justify-center gap-2 cursor-pointer transition-all hover:brightness-110"
-                  >
-                    <Sparkles className="w-4 h-4" />
-                    <span>生成本次解读</span>
-                  </motion.button>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {saveError && (
-              <p className="text-xs text-red-400 font-serif mt-2 animate-pulse">{saveError}</p>
-            )}
-          </div>
+          <RevealCardSection
+            serverCards={serverCards}
+            revealedStates={revealedStates}
+            allRevealed={allRevealed}
+            saveError={saveError}
+            onRevealAll={handleRevealAll}
+            onRevealCard={handleRevealCard}
+            onStartReading={handleStartReading}
+          />
         )}
 
       </div>

@@ -22,8 +22,8 @@ export async function POST(req: Request) {
       });
     }
 
-    const systemPrompt = buildFollowUpSystemPrompt(style);
-    const userPrompt = buildFollowUpUserPrompt(
+    const systemPrompt = await buildFollowUpSystemPrompt(style);
+    const userPrompt = await buildFollowUpUserPrompt(
       question,
       mood,
       spreadName,
