@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { SpreadType } from '@/lib/tarot/types';
 import { moodConfigs } from '@/lib/tarot/moods';
 import { useAudio } from '@/hooks/useAudio';
-import { getLocalReadings } from '@/lib/db/localJournal';
+import { getLocalReadings, getRecentMoodState } from '@/lib/db/localJournal';
 import { getTodayMoonPhase } from '@/lib/tarot/moonPhase';
 
 export const questionTemplates = [
@@ -60,6 +60,10 @@ export function useHomeReadingFlow() {
       latestEntry: readings[0] || null,
     };
   });
+
+  const recentMoodState = useMemo(() => {
+    return getRecentMoodState();
+  }, []);
 
   const selectedMoodConfig = useMemo(
     () => moodConfigs.find((mood) => mood.id === selectedMood) || moodConfigs[0],
@@ -145,6 +149,10 @@ export function useHomeReadingFlow() {
       spreadType: selectedSpread,
     });
 
+    if (recentMoodState) {
+      params.append('recentMoodState', recentMoodState);
+    }
+
     if (isDream) {
       params.append('isDream', 'true');
     }
@@ -192,5 +200,6 @@ export function useHomeReadingFlow() {
     handleCustomCardCountChange,
     handleCustomPositionChange,
     handleStart,
+    recentMoodState,
   };
 }

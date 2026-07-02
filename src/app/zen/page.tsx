@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Moon, Sparkles, Wind, Flame, Droplets, Mountain, ChevronRight } from 'lucide-react';
 import AppPageShell from '@/components/layout/AppPageShell';
@@ -8,6 +8,8 @@ import BottomNav from '@/components/layout/BottomNav';
 import DreamJournalModal from '@/components/journal/DreamJournalModal';
 import BreathingZen from '@/components/tarot/BreathingZen';
 import NightReflectionsModal from '@/components/journal/NightReflectionsModal';
+import { getLocalCheckIns, getLocalDateString, getLocalReadings } from '@/lib/db/localJournal';
+import { moodConfigs } from '@/lib/tarot/moods';
 
 type ElementId = 'water' | 'fire' | 'wind' | 'earth';
 
@@ -27,7 +29,44 @@ const elements: Array<{
 export default function ZenPage() {
   const [showDreamModal, setShowDreamModal] = useState(false);
   const [showNightModal, setShowNightModal] = useState(false);
-  const [activeElement, setActiveElement] = useState<ElementId | 'default' | null>(null);
+  const [activeElement, setActiveElement] = useState<ElementId | 'default' | 'guardian' | null>(null);
+
+  const todayMoodCategory = useMemo(() => {
+    try {
+      const todayStr = getLocalDateString();
+      const checkins = getLocalCheckIns();
+      const todayCheckin = checkins.find((c) => c.date === todayStr);
+      if (todayCheckin) {
+        const config = moodConfigs.find((m) => m.id === todayCheckin.mood || m.name === todayCheckin.mood);
+        return config?.category || null;
+      }
+    } catch (e) {
+      console.error('Failed to get today mood category:', e);
+    }
+    return null;
+  }, []);
+
+  const recommendedElement = useMemo<'water' | 'fire' | null>(() => {
+    if (todayMoodCategory === 'storm') return 'water';
+    if (todayMoodCategory === 'shadow') return 'fire';
+    return null;
+  }, [todayMoodCategory]);
+
+  const guardianCard = useMemo(() => {
+    try {
+      const readings = getLocalReadings();
+      const nowMs = new Date().getTime();
+      const recentReadings = readings.filter((r) => nowMs - new Date(r.createdAt).getTime() <= 7 * 24 * 60 * 60 * 1000);
+      for (const r of recentReadings) {
+        if (!Array.isArray(r.cards)) continue;
+        const major = r.cards.find((c) => c.id.match(/^\d{2}-/) || (c as any).arcana === 'major');
+        if (major) return major;
+      }
+    } catch (e) {
+      console.error('Failed to get guardian card:', e);
+    }
+    return null;
+  }, []);
 
   return (
     <AppPageShell
@@ -108,18 +147,43 @@ export default function ZenPage() {
           </button>
         </div>
 
+        {recommendedElement && (
+          <div className="mt-4 p-3 rounded-xl border border-gold/15 bg-gold/5 flex gap-2 items-center text-[10px] text-gold-focus font-serif tracking-wider">
+            <Sparkles className="w-3.5 h-3.5 text-gold animate-pulse flex-shrink-0" />
+            <span>
+              {todayMoodCategory === 'storm' ? (
+                <>检测到你今日心绪处于风暴期，建议开启<b>『水元素调息』</b>以平定情绪波动。</>
+              ) : (
+                <>检测到你今日能量有些低迷沉闷，建议开启<b>『火元素调息』</b>以唤醒直觉与行动力。</>
+              )}
+            </span>
+          </div>
+        )}
+
         <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-4">
           {elements.map((element) => {
             const Icon = element.icon;
+            const isRecommended = recommendedElement === element.id;
             return (
               <button
                 key={element.id}
                 type="button"
                 onClick={() => setActiveElement(element.id)}
-                className={`group border-b border-gold/10 pb-4 text-left text-gold-muted transition-colors duration-300 ${element.tone}`}
+                className={`group border-b border-gold/10 pb-4 text-left text-gold-muted transition-colors duration-300 relative ${
+                  isRecommended 
+                    ? 'border-gold/30 shadow-[0_4px_12px_rgba(201,167,106,0.05)]' 
+                    : ''
+                } ${element.tone}`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-2xl font-serif text-gold">{element.name}</span>
+                  <span className="text-2xl font-serif text-gold flex items-center gap-1.5">
+                    {element.name}
+                    {isRecommended && (
+                      <span className="text-[8px] font-serif font-semibold tracking-widest text-[#C9A76A] border border-[#C9A76A]/40 px-1 py-0.5 rounded scale-90 animate-pulse bg-gold/5">
+                        今日推荐
+                      </span>
+                    )}
+                  </span>
                   <Icon className="h-4.5 w-4.5 text-current" />
                 </div>
                 <p className="mt-2 text-[11px] font-serif tracking-widest text-foreground/68">
@@ -130,6 +194,33 @@ export default function ZenPage() {
           })}
         </div>
       </motion.section>
+
+      {guardianCard && (
+        <div className="mt-8 pt-6 border-t border-gold/10">
+          <p className="text-[10px] font-mono uppercase tracking-[0.26em] text-gold-muted/50">
+            Archetype Guardian
+          </p>
+          <h2 className="mt-2 text-lg font-serif font-semibold tracking-widest text-gold">
+            卡牌原型守护调息
+          </h2>
+          
+          <button
+            type="button"
+            onClick={() => setActiveElement('guardian')}
+            className="mt-4 w-full p-4 rounded-2xl border border-gold/18 bg-gradient-to-r from-[#171610] via-[#2F291D] to-[#171610] flex justify-between items-center group cursor-pointer shadow-gold-glow text-left"
+          >
+            <div className="flex flex-col text-left gap-1">
+              <span className="text-xs font-serif font-bold text-gold tracking-widest flex items-center gap-1.5">
+                ✦ 与『{guardianCard.zhName}』共鸣静修
+              </span>
+              <span className="text-[9px] font-serif text-gold-muted/65 leading-relaxed tracking-wider mt-0.5 max-w-[280px]">
+                用呼吸连接此牌的象征能量，舒缓现实心结。
+              </span>
+            </div>
+            <ChevronRight className="h-4 w-4 text-gold/80 transition-all duration-300 group-hover:translate-x-1" />
+          </button>
+        </div>
+      )}
 
       <BottomNav />
 
@@ -143,7 +234,8 @@ export default function ZenPage() {
 
       {activeElement && (
         <BreathingZen
-          element={activeElement === 'default' ? null : activeElement}
+          element={activeElement === 'default' || activeElement === 'guardian' ? null : activeElement}
+          guardianCard={activeElement === 'guardian' ? guardianCard : undefined}
           onClose={() => setActiveElement(null)}
         />
       )}

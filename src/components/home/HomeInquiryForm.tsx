@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { AlertCircle, ArrowLeft, Sparkles } from 'lucide-react';
 import { questionTemplates, recommendSpreadForQuestion } from '@/hooks/useHomeReadingFlow';
@@ -24,6 +25,7 @@ interface HomeInquiryFormProps {
   onCustomCardCountChange: (count: number) => void;
   onCustomPositionChange: (index: number, value: string) => void;
   onSubmit: (event: React.FormEvent) => void;
+  recentMoodState?: 'shadow' | 'storm' | null;
 }
 
 const spreadOrder: SpreadType[] = [
@@ -59,7 +61,9 @@ export default function HomeInquiryForm({
   onCustomCardCountChange,
   onCustomPositionChange,
   onSubmit,
+  recentMoodState = null,
 }: HomeInquiryFormProps) {
+  const router = useRouter();
   const activeMood = moodConfigs.find((mood) => mood.id === selectedMood) || moodConfigs[0];
   const recommendedSpread = question.trim()
     ? recommendSpreadForQuestion(question, isDream)
@@ -94,6 +98,32 @@ export default function HomeInquiryForm({
             一句话也可以。越接近真实处境，解读越有帮助。
           </p>
         </div>
+
+        {recentMoodState && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-between p-3.5 rounded-xl border border-gold/20 bg-[#16130E]/60 shadow-[inset_0_0_8px_rgba(201,167,106,0.1)] text-xs text-gold font-serif leading-relaxed tracking-wider"
+          >
+            <div className="flex gap-2.5 items-start">
+              <span className="text-base leading-none">✦</span>
+              <p className="flex-1 text-[11px] text-gold-muted/90 font-serif leading-5">
+                {recentMoodState === 'storm' ? (
+                  <>镜面觉察到你最近心潮起伏，承受着较强的情绪风暴。在提问前，要先去做一次『水之净化调息』吗？</>
+                ) : (
+                  <>镜面感知到你最近有些疲惫与内耗。在开始抽牌解读前，是否需要先做一次火之调息唤起直觉？</>
+                )}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push('/zen')}
+              className="text-[9px] font-semibold text-gold border border-gold/30 hover:border-gold/60 rounded px-2.5 py-1 flex-shrink-0 cursor-pointer ml-3 bg-transparent whitespace-nowrap"
+            >
+              前往调息
+            </button>
+          </motion.div>
+        )}
 
         <div className="flex gap-2 overflow-x-auto py-1 no-scrollbar">
           {questionTemplates.map((template) => (

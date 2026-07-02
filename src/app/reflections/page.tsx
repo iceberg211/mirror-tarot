@@ -9,6 +9,8 @@ import { useJournalData } from '@/hooks/useJournalData';
 import AnalyticsTab from '@/components/journal/AnalyticsTab';
 import ProfileInsightPanel from '@/components/journal/ProfileInsightPanel';
 import ReflectionsOverview from '@/components/journal/ReflectionsOverview';
+import JungianArchetypeCard from '@/components/journal/JungianArchetypeCard';
+import MindOrbitWordCloud from '@/components/journal/MindOrbitWordCloud';
 
 export default function ReflectionsPage() {
   const router = useRouter();
@@ -43,6 +45,8 @@ export default function ReflectionsPage() {
         {hasEnoughEntries ? (
           <>
             <ProfileInsightPanel entries={entries} checkins={checkins} />
+            <JungianArchetypeCard entries={entries} />
+            <MindOrbitWordCloud entries={entries} />
             <AnalyticsTab
               analytics={analytics}
               checkins={checkins}

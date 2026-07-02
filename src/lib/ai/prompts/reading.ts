@@ -92,7 +92,8 @@ export async function buildReadingUserPrompt(
   spreadName: string,
   cardsWithMeanings: { card: SelectedCard; meaning: { general: string; love: string; career: string; advice: string } }[],
   isLateNight = false,
-  historyContext = ''
+  historyContext = '',
+  recentMoodState?: 'shadow' | 'storm'
 ): Promise<string> {
   const cardsContext = formatCardsContext(cardsWithMeanings);
 
@@ -107,7 +108,17 @@ export async function buildReadingUserPrompt(
     ? `\n\n【深夜特别守护提示】\n当前测算发生在深夜。请在输出的 # SUMMARY 块中注入一段更深、更柔软且包含安慰感的深夜治愈低语，作为信件的开篇。向他们传递一份此时此刻被温厚包容、被好好看见的慰藉感。`
     : '';
 
+  let moodAlertPrompt = '';
+  if (recentMoodState) {
+    if (recentMoodState === 'storm') {
+      moodAlertPrompt = `\n\n【连续心境预警指示】\n镜面监测到用户最近连续处于情绪风暴（纠结、愤怒、抗拒等）的心智状态。请在首段的 # SUMMARY 中融入加倍温厚、宽容、包容其焦虑或焦躁的抚慰词句，传递一份被无条件接纳与看见的安定感。`;
+    } else {
+      moodAlertPrompt = `\n\n【连续心境预警指示】\n镜面监测到用户最近连续处于阴影与内耗（迷茫、焦虑、悲伤、疲惫等）的低能量心智状态。请在首段的 # SUMMARY 中倾注一缕轻盈、温存的微光与宇宙祝福语，温柔地照亮他的镜中倒影，给予适度的心灵能量给养。`;
+    }
+  }
+
   const formattedHistoryContext = historyContext ? `${historyContext}\n\n` : '';
+  const lateNightPromptCombined = lateNightPrompt + moodAlertPrompt;
 
   return standardReadingUserPromptTemplate.format({
     question,
@@ -115,7 +126,7 @@ export async function buildReadingUserPrompt(
     spreadName,
     historyContext: formattedHistoryContext,
     cardsContext,
-    lateNightPrompt,
+    lateNightPrompt: lateNightPromptCombined,
   });
 }
 

@@ -21,6 +21,7 @@ function ReadingNewContent() {
   const spreadType = (searchParams.get('spreadType') || 'three_cards') as SpreadType;
   const isDream = searchParams.get('isDream') === 'true';
   const readingStyle = searchParams.get('readingStyle') || 'gentle';
+  const recentMoodState = (searchParams.get('recentMoodState') || undefined) as 'shadow' | 'storm' | undefined;
 
   const dreamAnalysis = searchParams.get('dreamAnalysis') || '';
   const dreamMetaphor = searchParams.get('dreamMetaphor') || '';
@@ -222,7 +223,8 @@ function ReadingNewContent() {
       emptyReading,
       isDream,
       readingStyle,
-      dreamContext
+      dreamContext,
+      recentMoodState
     );
     if (journalId) {
       router.push(`/reading/${journalId}?trigger=true&readingStyle=${readingStyle}`);

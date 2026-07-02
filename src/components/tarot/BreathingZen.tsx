@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Volume2, VolumeX, Sparkles } from 'lucide-react';
 import { useAudio } from '@/hooks/useAudio';
+import { saveLocalZenReading, getLocalCheckIns, getLocalDateString } from '@/lib/db/localJournal';
 
 interface BreathingZenProps {
   onClose: () => void;
   element?: 'water' | 'fire' | 'wind' | 'earth' | null;
+  guardianCard?: any;
 }
 
 type BreathPhase = 'inhale' | 'holdIn' | 'exhale' | 'holdOut';
@@ -72,7 +74,7 @@ const themeConfigs = {
   }
 };
 
-export default function BreathingZen({ onClose, element = null }: BreathingZenProps) {
+export default function BreathingZen({ onClose, element = null, guardianCard = null }: BreathingZenProps) {
   const theme = element && themeConfigs[element] ? themeConfigs[element] : themeConfigs.default;
 
   const { isMuted, toggleMute, playBowl, stopBowl, playElementAmbient, stopElementAmbient } = useAudio();
@@ -86,6 +88,28 @@ export default function BreathingZen({ onClose, element = null }: BreathingZenPr
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const breathTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [rating, setRating] = useState<number>(5);
+  const [notes, setNotes] = useState<string>('');
+  const [saved, setSaved] = useState<boolean>(false);
+
+  const getTodayMood = () => {
+    try {
+      const todayStr = getLocalDateString();
+      const checkins = getLocalCheckIns();
+      const checkin = checkins.find((c) => c.date === todayStr);
+      return checkin ? checkin.mood : '平静';
+    } catch {
+      return '平静';
+    }
+  };
+
+  const handleSaveZen = () => {
+    if (saved) return;
+    const todayMood = getTodayMood();
+    saveLocalZenReading(todayMood, selectedDuration, rating, notes, element);
+    setSaved(true);
+  };
 
   const startMeditation = () => {
     setTimeLeft(selectedDuration);
@@ -174,6 +198,15 @@ export default function BreathingZen({ onClose, element = null }: BreathingZenPr
 
   // 获取阶段提示语
   const getPhaseText = () => {
+    if (guardianCard) {
+      const name = guardianCard.zhName;
+      switch (phase) {
+        case 'inhale': return `吸气 (Inhale) ✦ 感受『${name}』心识原型流入`;
+        case 'holdIn': return `屏气 (Hold) ✦ 将『${name}』的原型能量沉淀至心脑`;
+        case 'exhale': return `呼气 (Exhale) ✦ 随风吹散对立冲突与内心执念`;
+        case 'holdOut': return `屏气 (Hold) ✦ 在镜子中凝视最真实的自我`;
+      }
+    }
     switch (phase) {
       case 'inhale': return theme.inhaleText;
       case 'holdIn': return theme.holdInText;
@@ -334,6 +367,23 @@ export default function BreathingZen({ onClose, element = null }: BreathingZenPr
                 />
               </svg>
 
+              {/* 如果有守护卡牌，渲染虚化背景 */}
+              {guardianCard && (
+                <motion.div
+                  animate={{ scale: config.scale * 0.9, opacity: config.opacity * 0.3 }}
+                  transition={{ duration: config.duration, ease: config.ease }}
+                  className="absolute w-36 h-60 rounded-xl overflow-hidden border border-gold/15 pointer-events-none z-0 shadow-gold-glow"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={guardianCard.image}
+                    alt={guardianCard.zhName}
+                    className="w-full h-full object-cover filter blur-[0.5px] brightness-[0.7]"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#05060A]/90 via-transparent to-[#05060A]/40" />
+                </motion.div>
+              )}
+
               {/* 动态生命之花图腾 */}
               <motion.div
                 animate={{ scale: config.scale, opacity: config.opacity }}
@@ -397,18 +447,64 @@ export default function BreathingZen({ onClose, element = null }: BreathingZenPr
             className="flex-grow flex flex-col items-center justify-center text-center max-w-md px-6 z-10"
           >
             {/* 金色发光星图占位 */}
-            <div className="w-24 h-24 rounded-full border border-gold/20 flex items-center justify-center mb-8 shadow-gold-glow animate-[spin_40s_linear_infinite]">
-              <div className="w-16 h-16 rounded-full border border-dashed border-gold/15" />
-              <div className="absolute w-2 h-2 rounded-full bg-gold/50" />
+            <div className="w-20 h-20 rounded-full border border-gold/20 flex items-center justify-center mb-6 shadow-gold-glow animate-[spin_40s_linear_infinite]">
+              <div className="w-12 h-12 rounded-full border border-dashed border-gold/15" />
+              <div className="absolute w-2.5 h-2.5 rounded-full bg-gold/50" />
             </div>
 
-            <h2 className="text-base font-serif text-gold font-bold tracking-widest mb-4">
+            <h2 className="text-base font-serif text-gold font-bold tracking-widest mb-2">
               ✦ 镜面洗礼完成 ✦
             </h2>
-            <p className="text-xs text-foreground/85 font-serif leading-relaxed tracking-wider px-4 mb-8">
-              浊气已除，灵明自现。<br />
-              这面心智之镜已被清空，愿此期 {element ? `${element.toUpperCase()} 元素的能量` : '平静的觉察'} 能够与您融为一体，带来澄澈与力量。
+            <p className="text-[10px] text-foreground/80 font-serif leading-relaxed tracking-wider px-4 mb-4">
+              浊气已除，灵明自现。这面心智之镜已被清空。<br />
+              {guardianCard ? `愿『${guardianCard.zhName}』的原型力量带给你澄澈。` : `愿此期 ${element === 'water' ? '水' : element === 'fire' ? '火' : element === 'wind' ? '风' : element === 'earth' ? '土' : '静觉'} 元素的能量与你融为一体。`}
             </p>
+
+            {/* 打分和心境感悟记录 */}
+            {!saved ? (
+              <div className="w-full max-w-xs flex flex-col gap-4 border border-gold/15 bg-card/25 p-4 rounded-2xl my-4 text-center">
+                <div className="flex flex-col gap-1.5 items-center">
+                  <span className="text-[10px] text-gold-muted/60 font-serif tracking-widest">
+                    评估你此刻的平静感
+                  </span>
+                  <div className="flex gap-2.5 my-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setRating(star)}
+                        className={`text-base font-bold transition-all cursor-pointer ${
+                          star <= rating ? 'text-gold-focus drop-shadow-[0_0_5px_rgba(201,167,106,0.3)]' : 'text-gold-muted/20'
+                        }`}
+                      >
+                        ✦
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="relative border-b border-gold/15 focus-within:border-gold/35 pb-1">
+                  <input
+                    type="text"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="写下当下的心境感悟（可选）..."
+                    className="w-full bg-transparent border-none outline-none text-xs font-serif text-center text-foreground placeholder:text-gold-muted/30 tracking-wide"
+                  />
+                </div>
+
+                <button
+                  onClick={handleSaveZen}
+                  className="w-full py-2.5 rounded-xl border border-gold/30 bg-gold/10 text-gold text-[10px] font-serif tracking-[0.15em] hover:bg-gold/15 cursor-pointer transition-all shadow-gold-glow"
+                >
+                  ✦ 记录这一刻的正念回响 ✦
+                </button>
+              </div>
+            ) : (
+              <div className="py-4 my-2 text-[10px] text-gold font-serif tracking-widest animate-pulse">
+                ✦ 觉察已存入情绪日记 ✦
+              </div>
+            )}
 
             <button
               onClick={() => {
@@ -416,9 +512,9 @@ export default function BreathingZen({ onClose, element = null }: BreathingZenPr
                 stopElementAmbient();
                 onClose();
               }}
-              className="px-6 py-2.5 rounded-lg border border-gold/25 bg-gold/5 text-[11px] text-gold font-serif tracking-widest hover:bg-gold/10 transition-all duration-300 cursor-pointer shadow-gold-glow"
+              className="px-6 py-2.5 rounded-lg border border-gold/20 bg-card/20 text-[10px] text-gold-muted/80 font-serif tracking-widest hover:border-gold/30 cursor-pointer mt-2"
             >
-              ✦ 完成冥想 ✦
+              完成并返回
             </button>
           </motion.div>
         )}

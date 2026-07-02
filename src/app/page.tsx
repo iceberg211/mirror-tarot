@@ -45,6 +45,7 @@ export default function HomePage() {
             onCustomCardCountChange={flow.handleCustomCardCountChange}
             onCustomPositionChange={flow.handleCustomPositionChange}
             onSubmit={flow.handleStart}
+            recentMoodState={flow.recentMoodState}
           />
         )}
 

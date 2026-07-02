@@ -226,6 +226,7 @@ export function useReadingDetail(id: string, trigger: boolean) {
           cards: entry.cards,
           style: entry.readingStyle || 'gentle',
           historyContext: historyContextPayload,
+          recentMoodState: entry.recentMoodState,
         }),
         signal: requestSignal,
       });

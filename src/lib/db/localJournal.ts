@@ -34,6 +34,9 @@ export interface JournalEntry {
     metaphor: string;
     sourceQuestion: string;
   };
+  recentMoodState?: 'shadow' | 'storm';
+  isZen?: boolean;
+  zenScore?: number;
 }
 
 
@@ -75,6 +78,9 @@ interface CloudReadingPayload extends ParsedReading {
     metaphor: string;
     sourceQuestion: string;
   };
+  _recentMoodState?: 'shadow' | 'storm';
+  _isZen?: boolean;
+  _zenScore?: number;
 }
 
 interface CloudCheckInRow {
@@ -371,7 +377,8 @@ export function saveLocalReading(
     analysis: string;
     metaphor: string;
     sourceQuestion: string;
-  }
+  },
+  recentMoodState?: 'shadow' | 'storm'
 ): string {
   if (typeof window === 'undefined') return '';
 
@@ -402,6 +409,7 @@ export function saveLocalReading(
     userNotes: '',
     readingStyle,
     dreamContext,
+    recentMoodState,
   };
 
   try {
@@ -417,6 +425,59 @@ export function saveLocalReading(
     return id;
   } catch (e) {
     console.error('Failed to save reading to localStorage:', e);
+    return '';
+  }
+}
+
+export function saveLocalZenReading(
+  mood: string,
+  durationSec: number,
+  score: number,
+  notes: string,
+  element: string | null
+): string {
+  if (typeof window === 'undefined') return '';
+  const id = `local-zen-${crypto.randomUUID()}`;
+  const elementLabel = 
+    element === 'water' ? '水' :
+    element === 'fire' ? '火' :
+    element === 'wind' ? '风' :
+    element === 'earth' ? '土' : '静音';
+
+  const emptyReading: ParsedReading = {
+    questionSummary: '正念禅修调息',
+    intuitiveSummary: `完成了 ${durationSec / 60} 分钟的 ${elementLabel}元素正念禅修调息。状态得到了深层放松与净化。`,
+    cardReadings: [],
+    contradiction: '',
+    overlookedFactor: '',
+    actionAdvice: notes ? `禅修感悟：${notes}` : '静心调息，气顺心明。',
+    gentleReminder: '尘埃散去，灵明自现。',
+    followUpSuggestions: []
+  };
+
+  const newEntry: JournalEntry = {
+    id,
+    question: `${elementLabel}元素禅修调息`,
+    mood,
+    spreadType: 'custom',
+    cards: [],
+    reading: emptyReading,
+    createdAt: new Date().toISOString(),
+    userNotes: notes,
+    isZen: true,
+    zenScore: score
+  };
+
+  try {
+    const existing = getLocalReadings();
+    const updated = [newEntry, ...existing];
+    
+    // 冥想也记为当日打卡
+    saveLocalCheckIn(mood);
+    saveAndSyncEntry(newEntry, updated);
+    return id;
+  } catch (e) {
+    console.error('Failed to save Zen reading:', e);
     return '';
   }
 }
@@ -1232,3 +1293,64 @@ export function setCachedReading(
     console.error('Failed to set cached reading:', e);
   }
 }
+
+/**
+ * 判断最近 3 天是否持续处于负面情绪状态（连续 2 天以上属于 shadow 或 storm）
+ */
+export function getRecentMoodState(): 'shadow' | 'storm' | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const dates: string[] = [];
+    const now = new Date();
+    for (let i = 0; i < 3; i++) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      dates.push(`${year}-${month}-${day}`);
+    }
+
+    const checkins = getLocalCheckIns();
+    const readings = getLocalReadings();
+
+    const dayCategories: Record<string, 'light' | 'shadow' | 'storm' | null> = {};
+
+    dates.forEach((dateStr) => {
+      // 1. 优先查打卡记录
+      const checkin = checkins.find((c) => c.date === dateStr);
+      if (checkin) {
+        const config = moodConfigs.find((m) => m.id === checkin.mood || m.name === checkin.mood);
+        if (config) {
+          dayCategories[dateStr] = config.category;
+          return;
+        }
+      }
+      // 2. 其次查情绪日记记录
+      const reading = readings.find((r) => r.createdAt.startsWith(dateStr));
+      if (reading) {
+        const config = moodConfigs.find((m) => m.id === reading.mood || m.name === reading.mood);
+        if (config) {
+          dayCategories[dateStr] = config.category;
+          return;
+        }
+      }
+      dayCategories[dateStr] = null;
+    });
+
+    let shadowDays = 0;
+    let stormDays = 0;
+    dates.forEach((dateStr) => {
+      const cat = dayCategories[dateStr];
+      if (cat === 'shadow') shadowDays++;
+      if (cat === 'storm') stormDays++;
+    });
+
+    if (shadowDays + stormDays >= 2) {
+      return stormDays >= shadowDays ? 'storm' : 'shadow';
+    }
+  } catch (e) {
+    console.error('Failed to calculate recent mood state:', e);
+  }
+  return null;
+}
+
