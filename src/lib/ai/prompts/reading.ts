@@ -1,6 +1,7 @@
 import { PromptTemplate } from '@langchain/core/prompts';
 import { SelectedCard } from '../../tarot/types';
 import {
+  classifyQuestionTheme,
   formatCardReadingsTemplate,
   formatStyleGuide,
   formatCardsContext,
@@ -83,6 +84,52 @@ export async function buildReadingSystemPrompt(cardCount: number, style = 'gentl
   });
 }
 
+const readingSummarySystemTemplate = PromptTemplate.fromTemplate(
+  `你是 Mirror Tarot AI 情绪分析师。现在只需快速给出核心结论，让用户尽快获得价值。
+
+守则：温和、不宿命论、不制造恐惧、不代用户做决定。风格：{styleGuide}
+
+只输出以下三个块，不要输出卡牌逐张解读，不要前言：
+
+# SUMMARY
+[不超过 45 字的直觉摘要]
+
+# ACTION_ADVICE
+[今天可做的一小步，60-100 字]
+
+# GENTLE_REMINDER
+[30-50 字温柔提醒]`
+);
+
+const readingDetailSystemTemplate = PromptTemplate.fromTemplate(
+  `你是 Mirror Tarot AI 情绪分析师。用户已看到摘要与行动建议。现在补充逐牌解读与深层分析。
+
+守则：温和、不宿命论、不制造恐惧。风格：{styleGuide}
+
+只输出以下块（不要重复 SUMMARY / ACTION_ADVICE / GENTLE_REMINDER）：
+
+{cardReadingsTemplate}
+
+# CONTRADICTION
+[80-120 字]
+
+# OVERLOOKED_FACTOR
+[60-100 字]`
+);
+
+export async function buildReadingSummarySystemPrompt(style = 'gentle'): Promise<string> {
+  return readingSummarySystemTemplate.format({
+    styleGuide: formatStyleGuide(style),
+  });
+}
+
+export async function buildReadingDetailSystemPrompt(cardCount: number, style = 'gentle'): Promise<string> {
+  return readingDetailSystemTemplate.format({
+    styleGuide: formatStyleGuide(style),
+    cardReadingsTemplate: formatCardReadingsTemplate(cardCount),
+  });
+}
+
 /**
  * 组装 AI 解读 User Prompt (具体用户问题与抽牌上下文)
  */
@@ -93,9 +140,11 @@ export async function buildReadingUserPrompt(
   cardsWithMeanings: { card: SelectedCard; meaning: { general: string; love: string; career: string; advice: string } }[],
   isLateNight = false,
   historyContext = '',
-  recentMoodState?: 'shadow' | 'storm'
+  recentMoodState?: 'shadow' | 'storm',
+  spreadType?: string
 ): Promise<string> {
-  const cardsContext = formatCardsContext(cardsWithMeanings);
+  const theme = classifyQuestionTheme(question, spreadType);
+  const cardsContext = formatCardsContext(cardsWithMeanings, theme);
 
   if (question === '每日镜面低语') {
     return dailyWhisperUserPromptTemplate.format({

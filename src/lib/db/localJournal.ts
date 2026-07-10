@@ -48,6 +48,7 @@ export {
 
 export {
   generateCacheKey,
+  generateCacheKeyAsync,
   getCachedRawText,
   getCachedReading,
   setCachedReading,

@@ -37,7 +37,7 @@ export default function BackupSection({
         数据备份与恢复
       </div>
       <p className="text-[10px] text-gold-muted/65 leading-relaxed font-serif">
-        由于目前不提供云端账号系统，您的情绪日记均保存在当前浏览器本地。建议定期备份您的日记数据，以防清理浏览器缓存造成日记丢失。
+        默认保存在当前浏览器本地。登录账号后可跨设备云同步；游客数据仅存本机，建议定期导出备份，避免清理缓存后丢失。
       </p>
 
       <div className="flex gap-3 mt-1">

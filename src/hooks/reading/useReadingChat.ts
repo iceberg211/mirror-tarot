@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { JournalEntry, updateChatHistory } from '@/lib/db/localJournal';
+import { getAuthHeaders } from '@/lib/ai/authHeaders';
 import { OnboardingState } from '@/lib/product/onboarding';
 
 function toCardRefs(cards: JournalEntry['cards']) {
@@ -90,9 +91,10 @@ export function useReadingChat(options: {
           ? crypto.randomUUID()
           : `${entry.id}-fu-${Date.now()}`;
 
+      const authHeaders = await getAuthHeaders();
       const response = await fetch('/api/reading/follow-up', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({
           question: entry.question,
           mood: entry.mood,

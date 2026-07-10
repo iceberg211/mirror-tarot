@@ -64,18 +64,36 @@ export default function HomeInquiryForm({
   recentMoodState = null,
 }: HomeInquiryFormProps) {
   const router = useRouter();
+  const [showAllMoods, setShowAllMoods] = React.useState(false);
+  const [showAllSpreads, setShowAllSpreads] = React.useState(false);
   const activeMood = moodConfigs.find((mood) => mood.id === selectedMood) || moodConfigs[0];
   const recommendedSpread = question.trim()
     ? recommendSpreadForQuestion(question, isDream)
     : 'three_cards';
   const recommendedSpreadName = spreads[recommendedSpread].name;
 
+  // 常用情绪优先；其余可展开
+  const primaryMoods = moodConfigs.filter((m) =>
+    ['calm', 'anxious', 'confused', 'tired', 'joyful', 'tangled'].includes(m.id)
+  );
+  const visibleMoods = showAllMoods ? moodConfigs : primaryMoods;
+
+  // 推荐 + 2 备选，其余收进「更多牌阵」
+  const primarySpreads = React.useMemo(() => {
+    const picks: SpreadType[] = [recommendedSpread];
+    for (const t of spreadOrder) {
+      if (!picks.includes(t) && picks.length < 3) picks.push(t);
+    }
+    return picks;
+  }, [recommendedSpread]);
+  const visibleSpreads = showAllSpreads ? spreadOrder : primarySpreads;
+
   return (
     <motion.section
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.42, ease: 'easeOut' }}
-      className="mx-auto w-full max-w-md px-6 pt-6 pb-8"
+      className="mx-auto w-full max-w-md px-6 pt-6 pb-10"
     >
       <button
         type="button"
@@ -125,17 +143,21 @@ export default function HomeInquiryForm({
           </motion.div>
         )}
 
-        <div className="flex gap-2 overflow-x-auto py-1 no-scrollbar">
-          {questionTemplates.map((template) => (
-            <button
-              key={template}
-              type="button"
-              onClick={() => onTemplateSelect(template)}
-              className="shrink-0 rounded-full border border-gold/12 px-3 py-1.5 text-[10px] font-serif tracking-wide text-gold-muted/78 transition-all duration-300 hover:border-gold/35 hover:text-gold"
-            >
-              {template}
-            </button>
-          ))}
+        <div className="relative">
+          <div className="flex gap-2 overflow-x-auto py-1 no-scrollbar pr-6">
+            {questionTemplates.map((template) => (
+              <button
+                key={template}
+                type="button"
+                onClick={() => onTemplateSelect(template)}
+                className="shrink-0 rounded-full border border-gold/12 px-3 py-2 text-xs font-serif tracking-wide text-gold-muted transition-all duration-300 hover:border-gold/35 hover:text-gold"
+              >
+                {template}
+              </button>
+            ))}
+          </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-background to-transparent" aria-hidden />
+          <p className="mt-1 text-[11px] font-serif text-gold-muted">← 左右滑动查看更多提问模板</p>
         </div>
 
         <div className="relative border-b border-gold/18 pb-3 focus-within:border-gold/45">
@@ -171,18 +193,18 @@ export default function HomeInquiryForm({
             </p>
           </div>
 
-          <div className="grid grid-cols-4 gap-2.5">
-            {moodConfigs.map((mood) => {
+          <div className="grid grid-cols-3 gap-2.5">
+            {visibleMoods.map((mood) => {
               const isSelected = selectedMood === mood.id;
               return (
                 <button
                   key={mood.id}
                   type="button"
                   onClick={() => onMoodChange(mood.id)}
-                  className={`h-12 rounded-full border text-[11px] font-serif tracking-widest transition-all duration-300 ${
+                  className={`min-h-11 rounded-full border text-xs font-serif tracking-widest transition-all duration-300 ${
                     isSelected
                       ? moodToneMap[mood.category]
-                      : 'border-gold/10 bg-transparent text-gold-muted/60 hover:border-gold/28 hover:text-gold-muted'
+                      : 'border-gold/10 bg-transparent text-gold-muted hover:border-gold/28 hover:text-gold-muted'
                   }`}
                 >
                   {mood.name}
@@ -190,27 +212,32 @@ export default function HomeInquiryForm({
               );
             })}
           </div>
+          {!showAllMoods && (
+            <button
+              type="button"
+              onClick={() => setShowAllMoods(true)}
+              className="self-start text-xs font-serif text-gold-muted underline-offset-2 hover:text-gold hover:underline"
+            >
+              展开全部情绪
+            </button>
+          )}
         </section>
 
         <section className="flex flex-col gap-3">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <p className="text-[10px] font-mono uppercase tracking-[0.26em] text-gold-muted/50">Spread</p>
+              <p className="text-xs font-mono uppercase tracking-[0.26em] text-gold-muted">Spread</p>
               <h3 className="mt-1 text-sm font-serif tracking-widest text-gold">牌阵</h3>
             </div>
-            {question.trim() && selectedSpread !== recommendedSpread && (
-              <button
-                type="button"
-                onClick={() => onSpreadChange(recommendedSpread)}
-                className="rounded-full border border-gold/20 px-3 py-1.5 text-[9px] font-serif tracking-widest text-gold-muted/75 transition-colors hover:border-gold/45 hover:text-gold"
-              >
+            {question.trim() && (
+              <p className="max-w-[160px] text-right text-xs font-serif leading-5 text-gold-muted">
                 推荐：{recommendedSpreadName}
-              </button>
+              </p>
             )}
           </div>
 
           <div className="flex flex-col divide-y divide-gold/10 border-y border-gold/10">
-            {spreadOrder.map((type) => {
+            {visibleSpreads.map((type) => {
               const spread = spreads[type];
               const isSelected = selectedSpread === type;
               const positionText = spread.positions.length > 0 ? spread.positions.join(' / ') : '自由定义';
@@ -223,15 +250,15 @@ export default function HomeInquiryForm({
                   className="grid min-h-[62px] grid-cols-[1fr_auto] items-center gap-4 py-3 text-left"
                 >
                   <span>
-                    <span className={`block text-xs font-serif font-semibold tracking-widest ${isSelected ? 'text-gold' : 'text-foreground/82'}`}>
+                    <span className={`block text-sm font-serif font-semibold tracking-widest ${isSelected ? 'text-gold' : 'text-foreground/85'}`}>
                       {spread.name}
                       {type === recommendedSpread && question.trim() && (
-                        <span className="ml-2 text-[8px] font-mono uppercase tracking-[0.18em] text-gold-muted/60">
+                        <span className="ml-2 text-[10px] font-mono uppercase tracking-[0.18em] text-gold-muted">
                           推荐
                         </span>
                       )}
                     </span>
-                    <span className="mt-1 block text-[9px] font-serif tracking-wide text-gold-muted/58">
+                    <span className="mt-1 block text-xs font-serif tracking-wide text-gold-muted">
                       {positionText}
                     </span>
                   </span>
@@ -240,6 +267,15 @@ export default function HomeInquiryForm({
               );
             })}
           </div>
+          {!showAllSpreads && (
+            <button
+              type="button"
+              onClick={() => setShowAllSpreads(true)}
+              className="self-start text-xs font-serif text-gold-muted underline-offset-2 hover:text-gold hover:underline"
+            >
+              更多牌阵
+            </button>
+          )}
         </section>
 
         {selectedSpread === 'custom' && (

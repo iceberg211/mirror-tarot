@@ -1,6 +1,6 @@
 'use client';
 
-import React, { memo, useEffect, useMemo, useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Info, Flame, AlertCircle, Eye } from 'lucide-react';
 import { SelectedCard, ParsedReading } from '@/lib/tarot/types';
@@ -13,11 +13,12 @@ interface ReadingResultProps {
   activeFocusIndex?: number;
 }
 
+// 审计：今天可做优先 — 行动建议放在首个页签
 const TAB_CONFIG = [
-  { id: 'contradiction', name: '核心矛盾', icon: Info, key: 'contradiction' },
-  { id: 'overlooked', name: '忽略因素', icon: Eye, key: 'overlookedFactor' },
-  { id: 'advice', name: '建议行动', icon: Flame, key: 'actionAdvice' },
-  { id: 'reminder', name: '温柔提醒', icon: AlertCircle, key: 'gentleReminder' },
+  { id: 'advice', name: '今天一步', icon: Flame, key: 'actionAdvice' },
+  { id: 'reminder', name: '提醒', icon: AlertCircle, key: 'gentleReminder' },
+  { id: 'contradiction', name: '矛盾', icon: Info, key: 'contradiction' },
+  { id: 'overlooked', name: '盲点', icon: Eye, key: 'overlookedFactor' },
 ] as const;
 
 type ReadingDetailMode = 'beginner' | 'deep';
@@ -139,14 +140,15 @@ export default function ReadingResult({
   generating,
   activeFocusIndex = -1,
 }: ReadingResultProps) {
-  const [activeTab, setActiveTab] = useState<ResultTabId>('contradiction');
-  const [detailMode, setDetailMode] = useState<ReadingDetailMode>(() => {
-    if (typeof window === 'undefined') return 'beginner';
-    return localStorage.getItem(DETAIL_MODE_STORAGE_KEY) === 'deep' ? 'deep' : 'beginner';
-  });
+  const [activeTab, setActiveTab] = useState<ResultTabId>('advice');
+  const [userCardsExpanded, setUserCardsExpanded] = useState(false);
+  const [detailMode, setDetailMode] = useState<ReadingDetailMode>('beginner');
 
   // 百科 Modal 状态
   const [modalCard, setModalCard] = useState<SelectedCard | null>(null);
+
+  // 生成中强制展开；用户也可手动展开
+  const cardsExpanded = generating || userCardsExpanded;
 
   const tabs = useMemo(() => {
     return TAB_CONFIG.map((tab) => ({
@@ -164,22 +166,27 @@ export default function ReadingResult({
     return tabs.find((tab) => !!tab.content?.trim())?.id || activeTab;
   }, [activeTab, generating, tabs]);
 
-  useEffect(() => {
-    localStorage.setItem(DETAIL_MODE_STORAGE_KEY, detailMode);
-  }, [detailMode]);
+  const handleDetailMode = (mode: ReadingDetailMode) => {
+    setDetailMode(mode);
+    try {
+      localStorage.setItem(DETAIL_MODE_STORAGE_KEY, mode);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const handleOpenDictionary = (card: SelectedCard) => {
     setModalCard(card);
   };
 
   return (
-    <div className="w-full max-w-md px-6 flex flex-col gap-6 select-none pb-12 z-10">
+    <div className="w-full max-w-md px-6 flex flex-col gap-6 pb-12 z-10">
       {/* 阶段 1：先看结论 */}
       {(parsedReading.intuitiveSummary || generating) && (
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2 px-1">
             <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-gold/20" />
-            <span className="text-[9px] font-serif text-gold/75 tracking-[0.24em] font-semibold uppercase">先看结论 ✦ First Intuition</span>
+            <span className="text-xs font-serif text-gold tracking-[0.2em] font-semibold uppercase">先看结论</span>
             <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-gold/20" />
           </div>
 
@@ -191,9 +198,9 @@ export default function ReadingResult({
               className="relative p-5 rounded-2xl glassmorphism text-center italic border-gold/25"
             >
               <div className="absolute top-2 left-3 text-gold/30 text-3xl font-serif">“</div>
-              <p className="text-sm font-serif text-gold/90 leading-relaxed px-4">
+              <p className="text-base font-serif text-gold/90 leading-relaxed px-4">
                 {parsedReading.intuitiveSummary || (
-                  <span className="text-gold-muted/40 animate-pulse">正在倾听卡牌的直觉声音...</span>
+                  <span className="text-gold-muted animate-pulse">正在倾听卡牌的直觉声音...</span>
                 )}
               </p>
               <div className="absolute bottom-2 right-4 text-gold/30 text-3xl font-serif">”</div>
@@ -202,68 +209,12 @@ export default function ReadingResult({
         </div>
       )}
 
-      {/* 阶段 2：逐张牌 */}
-      <div className="flex flex-col gap-5">
-        <div className="flex items-center gap-2 px-1 mt-1">
-          <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-gold/20" />
-          <span className="text-[9px] font-serif text-gold/75 tracking-[0.24em] font-semibold uppercase">逐张牌映射 ✦ Card Meanings</span>
-          <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-gold/20" />
-        </div>
-
-        <div className="flex items-center justify-between border-y border-gold/10 py-3">
-          <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.24em] text-gold-muted/45">
-              Reading Mode
-            </p>
-            <p className="mt-1 text-xs font-serif tracking-widest text-gold">
-              {detailMode === 'beginner' ? '新手模式' : '深度模式'}
-            </p>
-          </div>
-          <div className="flex rounded-full border border-gold/12 p-1">
-            {([
-              ['beginner', '新手'],
-              ['deep', '深度'],
-            ] as const).map(([mode, label]) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setDetailMode(mode)}
-                className={`rounded-full px-3 py-1.5 text-[10px] font-serif tracking-widest transition-colors cursor-pointer ${
-                  detailMode === mode
-                    ? 'bg-gold/10 text-gold'
-                    : 'text-gold-muted/55 hover:text-gold'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {cards.map((card, idx) => {
-          const isPending = generating && activeFocusIndex !== -1 && idx > activeFocusIndex;
-          return (
-            <ReadingCardInsight
-              key={card.id}
-              card={card}
-              index={idx}
-              interpretation={parsedReading.cardReadings[idx]?.interpretation}
-              detailMode={detailMode}
-              generating={generating}
-              isActiveFocus={activeFocusIndex === idx}
-              isPending={isPending}
-              onOpenDictionary={handleOpenDictionary}
-            />
-          );
-        })}
-      </div>
-
-      {/* 阶段 3：今天可做 (切签卡片) */}
+      {/* 阶段 2：今天可做（结论后立刻给行动，审计中优） */}
       {(parsedReading.contradiction || parsedReading.overlookedFactor || parsedReading.actionAdvice || parsedReading.gentleReminder || generating) && (
         <div className="flex flex-col gap-4.5">
           <div className="flex items-center gap-2 px-1 mt-1">
             <div className="h-[1px] flex-1 bg-gradient-to-r from-transparent to-gold/20" />
-            <span className="text-[9px] font-serif text-gold/75 tracking-[0.24em] font-semibold uppercase">今天可做 ✦ Daily Action Plan</span>
+            <span className="text-xs font-serif text-gold tracking-[0.2em] font-semibold uppercase">今天可做</span>
             <div className="h-[1px] flex-1 bg-gradient-to-l from-transparent to-gold/20" />
           </div>
 
@@ -318,6 +269,74 @@ export default function ReadingResult({
               </AnimatePresence>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 阶段 3：逐张牌（默认折叠，生成中展开） */}
+      {cards.length > 0 && (
+        <div className="flex flex-col gap-4">
+          <button
+            type="button"
+            onClick={() => setUserCardsExpanded((v) => !v)}
+            className="flex w-full items-center justify-between gap-3 border-y border-gold/12 py-3 text-left"
+            aria-expanded={cardsExpanded}
+          >
+            <div>
+              <p className="text-xs font-mono uppercase tracking-[0.2em] text-gold-muted">Card Meanings</p>
+              <p className="mt-1 text-sm font-serif tracking-widest text-gold">
+                逐张牌映射 · {cards.length} 张
+              </p>
+            </div>
+            <span className="text-xs font-serif text-gold-muted">
+              {cardsExpanded ? '收起' : '展开'}
+            </span>
+          </button>
+
+          {cardsExpanded && (
+            <>
+              <div className="flex items-center justify-between border-b border-gold/10 pb-3">
+                <p className="text-sm font-serif tracking-widest text-gold">
+                  {detailMode === 'beginner' ? '新手模式' : '深度模式'}
+                </p>
+                <div className="flex rounded-full border border-gold/12 p-1">
+                  {([
+                    ['beginner', '新手'],
+                    ['deep', '深度'],
+                  ] as const).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => handleDetailMode(mode)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-serif tracking-widest transition-colors cursor-pointer ${
+                        detailMode === mode
+                          ? 'bg-gold/10 text-gold'
+                          : 'text-gold-muted hover:text-gold'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {cards.map((card, idx) => {
+                const isPending = generating && activeFocusIndex !== -1 && idx > activeFocusIndex;
+                return (
+                  <ReadingCardInsight
+                    key={card.id}
+                    card={card}
+                    index={idx}
+                    interpretation={parsedReading.cardReadings[idx]?.interpretation}
+                    detailMode={detailMode}
+                    generating={generating}
+                    isActiveFocus={activeFocusIndex === idx}
+                    isPending={isPending}
+                    onOpenDictionary={handleOpenDictionary}
+                  />
+                );
+              })}
+            </>
+          )}
         </div>
       )}
 

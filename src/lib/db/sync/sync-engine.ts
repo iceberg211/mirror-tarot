@@ -13,19 +13,89 @@ import {
   writeJsonArray,
 } from '../local-storage';
 import {
+  getAllLocalReadings,
   getLocalCheckIns,
   getLocalMonthlyReport,
-  getLocalReadings,
 } from '../journal-crud';
-import { mergeCheckIns, mergeReadings } from './merge';
+import { mergeCheckIns, mergeReadings, normalizeJournalEntry } from './merge';
 
 function isCloudEnabled(): boolean {
   return Boolean(supabase);
 }
 
+function mapCloudReading(r: CloudReadingRow): JournalEntry {
+  const {
+    _chatHistory: chatHistory,
+    _isStarred: isStarred,
+    _actionSeed: actionSeed,
+    _userNotes: userNotes,
+    _readingStyle: readingStyle,
+    _dreamContext: dreamContext,
+    _recentMoodState: recentMoodState,
+    _isZen: isZen,
+    _zenScore: zenScore,
+    ...cleanReading
+  } = r.reading || ({} as CloudReadingRow['reading']);
+
+  return normalizeJournalEntry({
+    id: r.id,
+    question: r.question,
+    mood: r.mood,
+    spreadType: r.spread_type as SpreadType,
+    cards: r.cards,
+    reading: cleanReading as JournalEntry['reading'],
+    createdAt: r.created_at,
+    updatedAt: r.updated_at || r.created_at,
+    revision: typeof r.revision === 'number' && r.revision > 0 ? r.revision : 1,
+    deletedAt: r.deleted_at ?? null,
+    clientId: r.client_id || undefined,
+    syncStatus: 'synced',
+    isDream: r.is_dream,
+    chatHistory,
+    isStarred,
+    actionSeed,
+    userNotes,
+    readingStyle,
+    dreamContext,
+    recentMoodState,
+    isZen,
+    zenScore,
+  });
+}
+
+function toCloudRow(entry: JournalEntry, userId: string, deviceId: string) {
+  const normalized = normalizeJournalEntry(entry);
+  return {
+    id: normalized.id,
+    user_id: userId,
+    device_id: deviceId,
+    question: normalized.question,
+    mood: normalized.mood,
+    spread_type: normalized.spreadType,
+    cards: normalized.cards,
+    reading: {
+      ...normalized.reading,
+      _chatHistory: normalized.chatHistory,
+      _isStarred: normalized.isStarred,
+      _actionSeed: normalized.actionSeed,
+      _userNotes: normalized.userNotes,
+      _readingStyle: normalized.readingStyle,
+      _dreamContext: normalized.dreamContext,
+      _recentMoodState: normalized.recentMoodState,
+      _isZen: normalized.isZen,
+      _zenScore: normalized.zenScore,
+    },
+    created_at: normalized.createdAt,
+    updated_at: normalized.updatedAt,
+    deleted_at: normalized.deletedAt || null,
+    revision: normalized.revision,
+    client_id: normalized.clientId || deviceId,
+    is_dream: normalized.isDream || false,
+  };
+}
+
 /**
- * 拉取云端数据、与本地合并后写回，并把本地独有记录推送上云。
- * 会检查 Supabase 返回的 error；任一关键写入失败则返回 false。
+ * 拉取云端、按 revision/updatedAt 合并，推送本地更新或独有记录。
  */
 export async function syncJournalData(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
@@ -66,37 +136,12 @@ export async function syncJournalData(): Promise<boolean> {
     const cloudCheckins = (checkinsRes.data || []) as CloudCheckInRow[];
     const cloudReport = reportRes.data as CloudMonthlyReportRow | null;
 
-    const cloudMappedReadings: JournalEntry[] = cloudReadings.map((r) => {
-      const {
-        _chatHistory: chatHistory,
-        _isStarred: isStarred,
-        _actionSeed: actionSeed,
-        _userNotes: userNotes,
-        _readingStyle: readingStyle,
-        _dreamContext: dreamContext,
-        ...cleanReading
-      } = r.reading;
-
-      return {
-        id: r.id,
-        question: r.question,
-        mood: r.mood,
-        spreadType: r.spread_type as SpreadType,
-        cards: r.cards,
-        reading: cleanReading,
-        createdAt: r.created_at,
-        isDream: r.is_dream,
-        chatHistory,
-        isStarred,
-        actionSeed,
-        userNotes,
-        readingStyle,
-        dreamContext,
-      };
-    });
-
-    const localReadings = getLocalReadings();
-    const mergedReadings = mergeReadings(cloudMappedReadings, localReadings);
+    const cloudMappedReadings = cloudReadings.map(mapCloudReading);
+    const localReadings = getAllLocalReadings();
+    const mergedReadings = mergeReadings(cloudMappedReadings, localReadings).map((entry) => ({
+      ...entry,
+      syncStatus: 'synced' as const,
+    }));
 
     const cloudMappedCheckins = cloudCheckins.map((c) => ({
       date: c.date,
@@ -119,35 +164,21 @@ export async function syncJournalData(): Promise<boolean> {
       setMonthlyReportForKey(getScopedStorageKey(MONTHLY_REPORT_KEY, userId), mergedReport);
     }
 
-    const cloudReadingIds = new Set(cloudReadings.map((r) => r.id));
-    const readingsToPush = mergedReadings.filter((r) => !cloudReadingIds.has(r.id));
+    // 推送：云端缺失，或本地 revision 更高（含墓碑/收藏等变更）
+    const cloudById = new Map(cloudMappedReadings.map((r) => [r.id, r]));
+    const pushList = mergedReadings.filter((local) => {
+      const cloud = cloudById.get(local.id);
+      if (!cloud) return true;
+      return local.revision > cloud.revision;
+    });
 
     const cloudCheckinDates = new Set(cloudCheckins.map((c) => c.date));
     const checkinsToPush = mergedCheckins.filter((c) => !cloudCheckinDates.has(c.date));
 
     const pushErrors: string[] = [];
 
-    if (readingsToPush.length > 0) {
-      const dbReadings = readingsToPush.map((r) => ({
-        id: r.id,
-        user_id: userId,
-        device_id: deviceId,
-        question: r.question,
-        mood: r.mood,
-        spread_type: r.spreadType,
-        cards: r.cards,
-        reading: {
-          ...r.reading,
-          _chatHistory: r.chatHistory,
-          _isStarred: r.isStarred,
-          _actionSeed: r.actionSeed,
-          _userNotes: r.userNotes,
-          _readingStyle: r.readingStyle,
-          _dreamContext: r.dreamContext,
-        },
-        created_at: r.createdAt,
-        is_dream: r.isDream || false,
-      }));
+    if (pushList.length > 0) {
+      const dbReadings = pushList.map((r) => toCloudRow(r, userId, deviceId));
       const { error } = await supabase.from('readings').upsert(dbReadings);
       if (error) {
         console.error('Failed to push readings:', error);

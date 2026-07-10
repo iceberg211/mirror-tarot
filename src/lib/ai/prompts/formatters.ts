@@ -1,5 +1,44 @@
 import { SelectedCard } from '../../tarot/types';
 
+export type QuestionTheme = 'career' | 'love' | 'emotion' | 'choice' | 'general';
+
+/**
+ * 规则判断问题主题，用于裁剪牌义字段、降低 token。
+ */
+export function classifyQuestionTheme(
+  question: string,
+  spreadType?: string
+): QuestionTheme {
+  const q = (question || '').toLowerCase();
+
+  if (
+    spreadType === 'career' ||
+    /工作|职业|事业|项目|升职|跳槽|面试|创业|同事|老板|KPI|业绩/.test(q)
+  ) {
+    return 'career';
+  }
+
+  if (
+    spreadType === 'relationship' ||
+    /感情|恋爱|爱情|关系|分手|复合|暗恋|伴侣|婚姻|暧昧|前任/.test(q)
+  ) {
+    return 'love';
+  }
+
+  if (spreadType === 'choice' || /选择|抉择|二选一|该不该|还是|A还是B|选项/.test(q)) {
+    return 'choice';
+  }
+
+  if (
+    spreadType === 'shadow' ||
+    /情绪|焦虑|迷茫|难过|崩溃|内耗|抑郁|害怕|失眠|压力|心态/.test(q)
+  ) {
+    return 'emotion';
+  }
+
+  return 'general';
+}
+
 /**
  * 将抽中的卡牌列表格式化为 System Prompt 所需的占位模板
  */
@@ -29,11 +68,45 @@ export function formatStyleGuide(style: string, isFollowUp = false): string {
       : '表达温和清楚，把复杂感受说成人能马上理解的话。';
 }
 
+function formatMeaningLines(
+  meaning: { general: string; love: string; career: string; advice: string },
+  theme: QuestionTheme
+): string {
+  const lines: string[] = [`- 通用释义：${meaning.general}`];
+
+  switch (theme) {
+    case 'career':
+      lines.push(`- 职业关联：${meaning.career}`);
+      lines.push(`- 行动指引：${meaning.advice}`);
+      break;
+    case 'love':
+      lines.push(`- 感情分析：${meaning.love}`);
+      lines.push(`- 行动指引：${meaning.advice}`);
+      break;
+    case 'choice':
+      lines.push(`- 感情侧参考：${meaning.love}`);
+      lines.push(`- 职业侧参考：${meaning.career}`);
+      lines.push(`- 行动指引：${meaning.advice}`);
+      break;
+    case 'emotion':
+    case 'general':
+    default:
+      lines.push(`- 行动指引：${meaning.advice}`);
+      break;
+  }
+
+  return lines.join('\n');
+}
+
 /**
- * 将带释义的卡牌详情转化为文本上下文
+ * 将带释义的卡牌详情转化为文本上下文（按主题裁剪牌义）
  */
 export function formatCardsContext(
-  cardsWithMeanings: { card: SelectedCard; meaning: { general: string; love: string; career: string; advice: string } }[]
+  cardsWithMeanings: {
+    card: SelectedCard;
+    meaning: { general: string; love: string; career: string; advice: string };
+  }[],
+  theme: QuestionTheme = 'general'
 ): string {
   return cardsWithMeanings
     .map((item, idx) => {
@@ -44,10 +117,7 @@ export function formatCardsContext(
 位置正逆：${c.orientation === 'upright' ? '正位' : '逆位'}
 牌面关键字：${c.orientation === 'upright' ? c.keywords.upright.join(', ') : c.keywords.reversed.join(', ')}
 牌义参考背景：
-- 通用释义：${m.general}
-- 感情分析：${m.love}
-- 职业关联：${m.career}
-- 行动指引：${m.advice}`;
+${formatMeaningLines(m, theme)}`;
     })
     .join('\n\n');
 }

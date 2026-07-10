@@ -12,6 +12,7 @@ import {
   setMonthlyReportForKey,
   writeJsonArray,
 } from './local-storage';
+import { filterActiveReadings, normalizeJournalEntry } from './sync/merge';
 
 export function extractActionSeed(actionAdvice: string): string {
   if (!actionAdvice) return '';
@@ -21,19 +22,73 @@ export function extractActionSeed(actionAdvice: string): string {
   return firstSentence.length > 40 ? firstSentence.slice(0, 40) + '...' : firstSentence;
 }
 
-export function getLocalReadings(): JournalEntry[] {
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function withRevisionBump(entry: JournalEntry, patch: Partial<JournalEntry> = {}): JournalEntry {
+  const base = normalizeJournalEntry(entry);
+  return {
+    ...base,
+    ...patch,
+    revision: base.revision + 1,
+    updatedAt: nowIso(),
+    syncStatus: 'pending',
+    clientId: base.clientId || getDeviceId() || undefined,
+  };
+}
+
+function toCloudRow(entry: JournalEntry, userId: string, deviceId: string) {
+  const normalized = normalizeJournalEntry(entry);
+  return {
+    id: normalized.id,
+    user_id: userId,
+    device_id: deviceId,
+    question: normalized.question,
+    mood: normalized.mood,
+    spread_type: normalized.spreadType,
+    cards: normalized.cards,
+    reading: {
+      ...normalized.reading,
+      _chatHistory: normalized.chatHistory,
+      _isStarred: normalized.isStarred,
+      _actionSeed: normalized.actionSeed,
+      _userNotes: normalized.userNotes,
+      _readingStyle: normalized.readingStyle,
+      _dreamContext: normalized.dreamContext,
+      _recentMoodState: normalized.recentMoodState,
+      _isZen: normalized.isZen,
+      _zenScore: normalized.zenScore,
+    },
+    created_at: normalized.createdAt,
+    updated_at: normalized.updatedAt,
+    deleted_at: normalized.deletedAt || null,
+    revision: normalized.revision,
+    client_id: normalized.clientId || deviceId,
+    is_dream: normalized.isDream || false,
+  };
+}
+
+/** 含墓碑的全量本地记录（同步用） */
+export function getAllLocalReadings(): JournalEntry[] {
   if (typeof window === 'undefined') return [];
   try {
     const data = localStorage.getItem(getScopedStorageKey(LOCAL_STORAGE_KEY));
-    return data ? JSON.parse(data) : [];
+    const raw = data ? (JSON.parse(data) as JournalEntry[]) : [];
+    return raw.map(normalizeJournalEntry);
   } catch (e) {
     console.error('Failed to read local readings:', e);
     return [];
   }
 }
 
+/** 列表/业务默认：过滤已软删除 */
+export function getLocalReadings(): JournalEntry[] {
+  return filterActiveReadings(getAllLocalReadings());
+}
+
 export function getLocalReadingById(id: string): JournalEntry | undefined {
-  return getLocalReadings().find((r) => r.id === id);
+  return getAllLocalReadings().find((r) => r.id === id && !r.deletedAt);
 }
 
 export function getLocalCheckIns(): import('./types').CheckInEntry[] {
@@ -59,36 +114,15 @@ export function getLocalMonthlyReport(): string {
 
 export function saveAndSyncEntry(entry: JournalEntry, readings: JournalEntry[]): void {
   if (typeof window === 'undefined') return;
-  writeJsonArray(getScopedStorageKey(LOCAL_STORAGE_KEY), readings);
+  const normalizedList = readings.map(normalizeJournalEntry);
+  writeJsonArray(getScopedStorageKey(LOCAL_STORAGE_KEY), normalizedList);
 
   const userId = getActiveUserId();
   const deviceId = getDeviceId();
   if (userId && deviceId && supabase) {
     supabase
       .from('readings')
-      .upsert(
-        {
-          id: entry.id,
-          user_id: userId,
-          device_id: deviceId,
-          question: entry.question,
-          mood: entry.mood,
-          spread_type: entry.spreadType,
-          cards: entry.cards,
-          reading: {
-            ...entry.reading,
-            _chatHistory: entry.chatHistory,
-            _isStarred: entry.isStarred,
-            _actionSeed: entry.actionSeed,
-            _userNotes: entry.userNotes,
-            _readingStyle: entry.readingStyle,
-            _dreamContext: entry.dreamContext,
-          },
-          created_at: entry.createdAt,
-          is_dream: entry.isDream || false,
-        },
-        { onConflict: 'id' }
-      )
+      .upsert(toCloudRow(entry, userId, deviceId), { onConflict: 'id' })
       .then(({ error }) => {
         if (error) console.error('Failed to sync entry to Supabase:', error);
       });
@@ -101,7 +135,7 @@ export function saveLocalCheckIn(mood: string, dateInput?: string): boolean {
   const targetDate = dateInput || getLocalDateString();
   try {
     const existing = getLocalCheckIns();
-    const filtered = existing.filter((c: { date: string }) => c.date !== targetDate);
+    const filtered = existing.filter((c) => c.date !== targetDate);
     const updated = [...filtered, { date: targetDate, mood }];
 
     writeJsonArray(getScopedStorageKey(CHECKIN_STORAGE_KEY), updated);
@@ -147,7 +181,7 @@ export function saveLocalMonthlyReport(reportText: string): void {
             user_id: userId,
             device_id: deviceId,
             report: reportText,
-            updated_at: new Date().toISOString(),
+            updated_at: nowIso(),
           },
           { onConflict: 'user_id' }
         )
@@ -178,6 +212,7 @@ export function saveLocalReading(
   if (typeof window === 'undefined') return '';
 
   const id = `local-${crypto.randomUUID()}`;
+  const ts = nowIso();
   let actionSeed: ActionSeed | undefined;
 
   if (reading.actionAdvice) {
@@ -198,7 +233,12 @@ export function saveLocalReading(
     spreadType,
     cards,
     reading,
-    createdAt: new Date().toISOString(),
+    createdAt: ts,
+    updatedAt: ts,
+    revision: 1,
+    deletedAt: null,
+    clientId: getDeviceId() || undefined,
+    syncStatus: 'pending',
     isDream,
     actionSeed,
     userNotes: '',
@@ -208,7 +248,7 @@ export function saveLocalReading(
   };
 
   try {
-    const existing = getLocalReadings();
+    const existing = getAllLocalReadings();
     const updated = [newEntry, ...existing];
     saveLocalCheckIn(mood);
     saveAndSyncEntry(newEntry, updated);
@@ -228,6 +268,7 @@ export function saveLocalZenReading(
 ): string {
   if (typeof window === 'undefined') return '';
   const id = `local-zen-${crypto.randomUUID()}`;
+  const ts = nowIso();
   const elementLabel =
     element === 'water'
       ? '水'
@@ -257,14 +298,19 @@ export function saveLocalZenReading(
     spreadType: 'custom',
     cards: [],
     reading: emptyReading,
-    createdAt: new Date().toISOString(),
+    createdAt: ts,
+    updatedAt: ts,
+    revision: 1,
+    deletedAt: null,
+    clientId: getDeviceId() || undefined,
+    syncStatus: 'pending',
     userNotes: notes,
     isZen: true,
     zenScore: score,
   };
 
   try {
-    const existing = getLocalReadings();
+    const existing = getAllLocalReadings();
     const updated = [newEntry, ...existing];
     saveLocalCheckIn(mood);
     saveAndSyncEntry(newEntry, updated);
@@ -275,27 +321,20 @@ export function saveLocalZenReading(
   }
 }
 
+/** 软删除：写墓碑，同步 upsert deleted_at */
 export function deleteLocalReading(id: string): boolean {
   if (typeof window === 'undefined') return false;
 
   try {
-    const readings = getLocalReadings();
-    const filtered = readings.filter((r) => r.id !== id);
-    writeJsonArray(getScopedStorageKey(LOCAL_STORAGE_KEY), filtered);
+    const readings = getAllLocalReadings();
+    const index = readings.findIndex((r) => r.id === id);
+    if (index === -1) return false;
 
-    const userId = getActiveUserId();
-    const deviceId = getDeviceId();
-    if (userId && deviceId && supabase) {
-      supabase
-        .from('readings')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', userId)
-        .then(({ error }) => {
-          if (error) console.error('Failed to delete reading from Supabase:', error);
-        });
-    }
-
+    const tombstoned = withRevisionBump(readings[index], {
+      deletedAt: nowIso(),
+    });
+    readings[index] = tombstoned;
+    saveAndSyncEntry(tombstoned, readings);
     return true;
   } catch (e) {
     console.error('Failed to delete reading from localStorage:', e);
@@ -307,8 +346,8 @@ export function updateLocalReading(id: string, reading: ParsedReading): boolean 
   if (typeof window === 'undefined') return false;
 
   try {
-    const readings = getLocalReadings();
-    const index = readings.findIndex((r) => r.id === id);
+    const readings = getAllLocalReadings();
+    const index = readings.findIndex((r) => r.id === id && !r.deletedAt);
     if (index === -1) return false;
 
     const existingEntry = readings[index];
@@ -325,11 +364,10 @@ export function updateLocalReading(id: string, reading: ParsedReading): boolean 
       }
     }
 
-    readings[index] = {
-      ...existingEntry,
+    readings[index] = withRevisionBump(existingEntry, {
       reading,
       actionSeed,
-    };
+    });
 
     saveAndSyncEntry(readings[index], readings);
     return true;
@@ -343,13 +381,15 @@ export function toggleStarReading(id: string): boolean {
   if (typeof window === 'undefined') return false;
 
   try {
-    const readings = getLocalReadings();
-    const index = readings.findIndex((r) => r.id === id);
+    const readings = getAllLocalReadings();
+    const index = readings.findIndex((r) => r.id === id && !r.deletedAt);
     if (index === -1) return false;
 
     const entry = readings[index];
-    entry.isStarred = !entry.isStarred;
-    saveAndSyncEntry(entry, readings);
+    readings[index] = withRevisionBump(entry, {
+      isStarred: !entry.isStarred,
+    });
+    saveAndSyncEntry(readings[index], readings);
     return true;
   } catch (e) {
     console.error('Failed to toggle star reading:', e);
@@ -364,17 +404,19 @@ export function updateActionSeedStatus(
   if (typeof window === 'undefined') return false;
 
   try {
-    const readings = getLocalReadings();
-    const index = readings.findIndex((r) => r.id === id);
+    const readings = getAllLocalReadings();
+    const index = readings.findIndex((r) => r.id === id && !r.deletedAt);
     if (index === -1) return false;
 
     const entry = readings[index];
     if (entry.actionSeed) {
-      entry.actionSeed = {
-        ...entry.actionSeed,
-        status,
-      };
-      saveAndSyncEntry(entry, readings);
+      readings[index] = withRevisionBump(entry, {
+        actionSeed: {
+          ...entry.actionSeed,
+          status,
+        },
+      });
+      saveAndSyncEntry(readings[index], readings);
       return true;
     }
     return false;
@@ -388,13 +430,12 @@ export function updateChatHistory(id: string, chatHistory: ChatMessage[]): boole
   if (typeof window === 'undefined') return false;
 
   try {
-    const readings = getLocalReadings();
-    const index = readings.findIndex((r) => r.id === id);
+    const readings = getAllLocalReadings();
+    const index = readings.findIndex((r) => r.id === id && !r.deletedAt);
     if (index === -1) return false;
 
-    const entry = readings[index];
-    entry.chatHistory = chatHistory;
-    saveAndSyncEntry(entry, readings);
+    readings[index] = withRevisionBump(readings[index], { chatHistory });
+    saveAndSyncEntry(readings[index], readings);
     return true;
   } catch (e) {
     console.error('Failed to update chat history:', e);
@@ -406,13 +447,12 @@ export function updateJournalUserNotes(id: string, userNotes: string): boolean {
   if (typeof window === 'undefined') return false;
 
   try {
-    const readings = getLocalReadings();
-    const index = readings.findIndex((r) => r.id === id);
+    const readings = getAllLocalReadings();
+    const index = readings.findIndex((r) => r.id === id && !r.deletedAt);
     if (index === -1) return false;
 
-    const entry = readings[index];
-    entry.userNotes = userNotes;
-    saveAndSyncEntry(entry, readings);
+    readings[index] = withRevisionBump(readings[index], { userNotes });
+    saveAndSyncEntry(readings[index], readings);
     return true;
   } catch (e) {
     console.error('Failed to update journal user notes:', e);

@@ -59,10 +59,28 @@ export default function TarotCard({
 
 
 
+  const interactiveProps =
+    interactive && onClick
+      ? {
+          role: 'button' as const,
+          tabIndex: 0,
+          onClick: handleCardClick,
+          onKeyDown: (event: React.KeyboardEvent) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              handleCardClick();
+            }
+          },
+          'aria-label': card
+            ? `${card.zhName}，${card.orientation === 'reversed' ? '逆位' : '正位'}${revealed ? '，已翻开' : '，点击翻开'}`
+            : '塔罗牌，点击选择或翻开',
+        }
+      : {};
+
   return (
     <div
-      onClick={handleCardClick}
-      className={`perspective-1000 select-none ${interactive && onClick ? 'cursor-pointer' : ''} ${sizeClasses[size]} ${className}`}
+      {...interactiveProps}
+      className={`perspective-1000 select-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold/70 ${interactive && onClick ? 'cursor-pointer' : ''} ${sizeClasses[size]} ${className}`}
     >
       <motion.div
         style={{ transformStyle: 'preserve-3d' }}

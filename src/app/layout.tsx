@@ -10,8 +10,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // 允许用户缩放，满足低视力可访问性（审计高优先级）
 };
 
 export default function RootLayout({

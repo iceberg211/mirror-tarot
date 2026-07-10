@@ -1,11 +1,12 @@
 import {
   createLangChainChatStream,
   createLangChainJsonCompletion,
+  createTwoPhaseReadingStream,
   LangChainJsonResult,
 } from './langchainAgent';
-import { AIConfig, AIRequestOptions, ChatMessage, getAIConfig } from './config';
+import { AIConfig, AIRequestOptions, ChatMessage, getAIConfig, ModelTier } from './config';
 
-export type { AIConfig, AIRequestOptions, ChatMessage };
+export type { AIConfig, AIRequestOptions, ChatMessage, ModelTier };
 
 export interface AICompletionMeta {
   requestId: string;
@@ -15,8 +16,8 @@ export interface AICompletionMeta {
 
 export type AIJsonCompletionResult<T> = LangChainJsonResult<T>;
 
-export function getAIModelConfig(): AIConfig {
-  return getAIConfig();
+export function getAIModelConfig(tier: ModelTier = 'deep'): AIConfig {
+  return getAIConfig(tier);
 }
 
 export async function createAIChatStream(
@@ -24,6 +25,14 @@ export async function createAIChatStream(
   optionsInput: number | AIRequestOptions = 0.7
 ): Promise<Response> {
   return createLangChainChatStream(messages, optionsInput);
+}
+
+export async function createAITwoPhaseReadingStream(params: {
+  phase1Messages: ChatMessage[];
+  phase2Messages: ChatMessage[];
+  options?: AIRequestOptions;
+}): Promise<Response> {
+  return createTwoPhaseReadingStream(params);
 }
 
 export async function createAIJsonCompletion<T>(

@@ -12,6 +12,8 @@ export interface ActionSeed {
   date: string;
 }
 
+export type SyncStatus = 'synced' | 'pending' | 'conflict';
+
 export interface JournalEntry {
   id: string;
   question: string;
@@ -20,6 +22,14 @@ export interface JournalEntry {
   cards: SelectedCard[];
   reading: ParsedReading;
   createdAt: string;
+  /** 最后修改时间；缺省时回退 createdAt */
+  updatedAt: string;
+  /** 单调递增版本；缺省为 1 */
+  revision: number;
+  /** 软删除墓碑 */
+  deletedAt?: string | null;
+  clientId?: string;
+  syncStatus?: SyncStatus;
   isDream?: boolean;
   chatHistory?: ChatMessage[];
   isStarred?: boolean;
@@ -110,6 +120,10 @@ export interface CloudReadingRow {
   cards: SelectedCard[];
   reading: CloudReadingPayload;
   created_at: string;
+  updated_at?: string | null;
+  deleted_at?: string | null;
+  revision?: number | null;
+  client_id?: string | null;
   is_dream?: boolean;
 }
 

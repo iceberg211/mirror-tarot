@@ -35,8 +35,8 @@ class LangChainResponseFormatError extends Error {
   }
 }
 
-function assertAIConfig(): AIConfig {
-  const config = getAIConfig();
+function assertAIConfig(tier: AIRequestOptions['modelTier'] = 'deep'): AIConfig {
+  const config = getAIConfig(tier || 'deep');
 
   if (!config.apiKey) {
     throw new Error('DASHSCOPE_API_KEY is not configured');
@@ -58,6 +58,7 @@ function normalizeOptions(options?: number | AIRequestOptions): Required<AIReque
       timeoutMs: getDefaultTimeoutMs(),
       requestName: 'qwen',
       promptVersion: '',
+      modelTier: 'deep',
     };
   }
 
@@ -66,6 +67,7 @@ function normalizeOptions(options?: number | AIRequestOptions): Required<AIReque
     timeoutMs: options?.timeoutMs ?? getDefaultTimeoutMs(),
     requestName: options?.requestName ?? 'qwen',
     promptVersion: options?.promptVersion ?? '',
+    modelTier: options?.modelTier ?? 'deep',
   };
 }
 
@@ -144,13 +146,25 @@ function buildMetaHeaders(options: Required<AIRequestOptions>, requestId: string
 /**
  * 直接使用 ChatOpenAI 流式生成（无 Agent 循环、无 tools）。
  */
+async function streamModelText(
+  model: ChatOpenAI,
+  messages: BaseMessage[],
+  onToken: (token: string) => void
+): Promise<void> {
+  const stream = await model.stream(messages);
+  for await (const chunk of stream) {
+    const token = extractTextContent(chunk.content);
+    if (token) onToken(token);
+  }
+}
+
 export async function createLangChainChatStream(
   inputMessages: ChatMessage[],
   optionsInput: number | AIRequestOptions = 0.7
 ): Promise<Response> {
   const options = normalizeOptions(optionsInput);
   const requestId = createAIRequestId(options.requestName);
-  const config = assertAIConfig();
+  const config = assertAIConfig(options.modelTier);
   const model = createModel(config, options);
   const lcMessages = toLangChainMessages(inputMessages);
   const encoder = new TextEncoder();
@@ -158,13 +172,9 @@ export async function createLangChainChatStream(
   const textStream = new ReadableStream({
     async start(controller) {
       try {
-        const stream = await model.stream(lcMessages);
-        for await (const chunk of stream) {
-          const token = extractTextContent(chunk.content);
-          if (token) {
-            controller.enqueue(encoder.encode(token));
-          }
-        }
+        await streamModelText(model, lcMessages, (token) => {
+          controller.enqueue(encoder.encode(token));
+        });
         controller.close();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -178,6 +188,68 @@ export async function createLangChainChatStream(
   });
 }
 
+/**
+ * 两阶段流：fast 先产出 SUMMARY/ACTION/REMINDER，deep 再产出逐牌与分析。
+ * 客户端仍按文本标记解析，无需改协议即可改善 TTFT。
+ */
+export async function createTwoPhaseReadingStream(params: {
+  phase1Messages: ChatMessage[];
+  phase2Messages: ChatMessage[];
+  options?: AIRequestOptions;
+}): Promise<Response> {
+  const baseOptions = normalizeOptions(params.options);
+  const requestId = createAIRequestId(baseOptions.requestName || 'reading');
+  const fastConfig = assertAIConfig('fast');
+  const deepConfig = assertAIConfig('deep');
+  const fastModel = createModel(fastConfig, { ...baseOptions, modelTier: 'fast' });
+  const deepModel = createModel(deepConfig, { ...baseOptions, modelTier: 'deep' });
+  const encoder = new TextEncoder();
+
+  const textStream = new ReadableStream({
+    async start(controller) {
+      try {
+        await streamModelText(fastModel, toLangChainMessages(params.phase1Messages), (token) => {
+          controller.enqueue(encoder.encode(token));
+        });
+        controller.enqueue(encoder.encode('\n\n'));
+        await streamModelText(deepModel, toLangChainMessages(params.phase2Messages), (token) => {
+          controller.enqueue(encoder.encode(token));
+        });
+        controller.close();
+      } catch (error) {
+        // 瞬时错误时尝试 fallback 整段 deep
+        try {
+          const fallbackConfig = assertAIConfig('fallback');
+          const fallbackModel = createModel(fallbackConfig, {
+            ...baseOptions,
+            modelTier: 'fallback',
+          });
+          await streamModelText(
+            fallbackModel,
+            toLangChainMessages([...params.phase1Messages.slice(0, 1), params.phase2Messages[params.phase2Messages.length - 1]]),
+            (token) => controller.enqueue(encoder.encode(token))
+          );
+          controller.close();
+        } catch {
+          const message = error instanceof Error ? error.message : String(error);
+          controller.error(new LangChainRequestError(message, requestId));
+        }
+      }
+    },
+  });
+
+  return new Response(textStream, {
+    headers: {
+      ...buildMetaHeaders(
+        { ...baseOptions, promptVersion: baseOptions.promptVersion },
+        requestId,
+        `${fastConfig.modelName}+${deepConfig.modelName}`
+      ),
+      'X-Mirror-AI-Two-Phase': '1',
+    },
+  });
+}
+
 export async function createLangChainJsonCompletion<T>(
   inputMessages: ChatMessage[],
   optionsInput: AIRequestOptions & {
@@ -186,7 +258,7 @@ export async function createLangChainJsonCompletion<T>(
 ): Promise<LangChainJsonResult<T>> {
   const options = normalizeOptions(optionsInput);
   const requestId = createAIRequestId(options.requestName);
-  const config = assertAIConfig();
+  const config = assertAIConfig(options.modelTier);
   const model = createModel(config, options);
   const lcMessages = toLangChainMessages(inputMessages);
 

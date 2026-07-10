@@ -9,17 +9,21 @@ import BottomNav from '@/components/layout/BottomNav';
 import { getLocalReadings } from '@/lib/db/localJournal';
 import CardMeaningModal from '@/components/tarot/CardMeaningModal';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { useClientReady } from '@/hooks/useClientReady';
 
 export default function DeckPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('all'); // 'all' | 'major' | 'wands' | 'cups' | 'swords' | 'pentacles'
   const { theme } = useTheme();
+  const ready = useClientReady();
   
   // 选中的卡片，用于弹窗详细浏览
   const [selectedCard, setSelectedCard] = useState<TarotCardType | null>(null);
 
-  // 用户历史抽卡次数统计
-  const [drawnStats] = useState<Record<string, number>>(() => getDrawnStats());
+  const drawnStats = useMemo(
+    () => (ready ? getDrawnStats() : {}),
+    [ready]
+  );
 
   // 筛选分类配置
   const filterTabs = [
@@ -56,7 +60,7 @@ export default function DeckPage() {
   };
 
   return (
-    <main className="flex-grow min-h-screen pb-28 flex flex-col items-center text-foreground relative overflow-y-auto select-none bg-background transition-colors duration-400">
+    <main className="flex-grow min-h-screen pb-[calc(6.5rem+env(safe-area-inset-bottom))] flex flex-col items-center text-foreground relative overflow-y-auto bg-background transition-colors duration-400">
       
       {/* 极光背景层 */}
       <div className={`pointer-events-none fixed inset-0 transition-all duration-400 ${
@@ -71,8 +75,12 @@ export default function DeckPage() {
           <Book className="w-5 h-5" />
           <span>牌义图鉴</span>
         </h1>
-        <p className="text-[10px] text-gold-muted/65 font-mono tracking-wider uppercase">
+        <p className="text-xs text-gold-muted font-mono tracking-wider uppercase">
           Tarot Deck Meaning Encyclopedia
+        </p>
+        <p className="mt-3 text-sm font-serif leading-6 text-foreground/85">
+          已遇见 {Object.values(drawnStats).filter((n) => n > 0).length}/78。
+          抽到过的牌会点亮；未抽到的牌仍可点开查看牌义，只是图像略淡，不是加载失败。
         </p>
       </div>
 
@@ -141,25 +149,28 @@ export default function DeckPage() {
                 ? 'border-dashed border-gold/10 bg-[#0B0D13]/10 opacity-75 hover:opacity-100 hover:border-gold/20'
                 : 'border-dashed border-gold/18 bg-card/65 opacity-85 hover:opacity-100 hover:border-gold/35';
 
+              // 未遇见的牌仍保持可辨识，仅轻度降对比（审计：避免像加载失败）
               const imgClasses = isDrawn
-                ? 'opacity-80 group-hover:opacity-100'
-                : (theme === 'dark' 
-                    ? 'opacity-20 filter grayscale contrast-50 group-hover:opacity-45' 
-                    : 'opacity-35 filter grayscale contrast-75 brightness-[1.05] group-hover:opacity-55');
+                ? 'opacity-90 group-hover:opacity-100'
+                : (theme === 'dark'
+                    ? 'opacity-55 filter grayscale-[0.35] group-hover:opacity-80'
+                    : 'opacity-65 filter grayscale-[0.25] group-hover:opacity-90');
 
               const textClasses = isDrawn
                 ? (theme === 'dark' ? 'text-gold/90 font-semibold' : 'text-gold-focus font-bold')
-                : (theme === 'dark' ? 'text-gold-muted/40' : 'text-gold-muted/65');
+                : (theme === 'dark' ? 'text-gold-muted' : 'text-gold-muted');
 
               const subTextClasses = isDrawn
-                ? (theme === 'dark' ? 'text-gold-muted/30 font-mono' : 'text-gold-muted/60 font-mono')
-                : (theme === 'dark' ? 'text-gold-muted/20 font-mono' : 'text-gold-muted/40 font-mono');
+                ? (theme === 'dark' ? 'text-gold-muted font-mono' : 'text-gold-muted font-mono')
+                : (theme === 'dark' ? 'text-gold-muted/80 font-mono' : 'text-gold-muted/80 font-mono');
 
               return (
-                <div
+                <button
+                  type="button"
                   key={card.id}
                   onClick={() => handleOpenModal(card)}
-                  className={`rounded-xl border p-2 text-center flex flex-col justify-between items-center aspect-[2/3.3] cursor-pointer transition-all duration-300 group relative ${
+                  aria-label={`${card.zhName}${isDrawn ? `，已遇见 ${count} 次` : '，尚未抽到，可查看牌义'}`}
+                  className={`rounded-xl border p-2 text-center flex flex-col justify-between items-center aspect-[2/3.3] cursor-pointer transition-all duration-300 group relative focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold/70 ${
                     isDrawn ? activeCardClasses : inactiveCardClasses
                   }`}
                 >
@@ -200,11 +211,11 @@ export default function DeckPage() {
                     <span className={`text-[11px] font-serif tracking-widest truncate max-w-[80px] ${textClasses}`}>
                       {card.zhName}
                     </span>
-                    <span className={`text-[7px] font-mono tracking-tighter truncate max-w-[80px] mt-0.5 uppercase ${subTextClasses}`}>
-                      {card.name}
+                    <span className={`text-[10px] font-mono tracking-tighter truncate max-w-[80px] mt-0.5 uppercase ${subTextClasses}`}>
+                      {isDrawn ? card.name : '未遇见'}
                     </span>
                   </div>
-                </div>
+                </button>
               );
             })
           ) : (

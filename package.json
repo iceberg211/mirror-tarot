@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "ai:eval": "vitest run src/server/ai/evaluation",
     "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "db:init": "node scripts/init-supabase.cjs",
     "db:check": "node scripts/check-supabase.cjs",

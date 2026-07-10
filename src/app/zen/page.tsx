@@ -72,7 +72,7 @@ export default function ZenPage() {
   return (
     <AppPageShell
       eyebrow="Zen"
-      title="疗愈"
+      title="练习"
       description="梦境、晚间回顾和呼吸练习放在同一个安静的入口里，睡前打开也不会被信息淹没。"
       imageSrc="/cards/rws/14-temperance.jpg"
       imageAlt="节制塔罗牌"

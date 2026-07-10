@@ -4,7 +4,6 @@ import React, { Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Trash2, Star, ShieldCheck } from 'lucide-react';
 import ReadingResult from '@/components/tarot/ReadingResult';
-import BottomNav from '@/components/layout/BottomNav';
 import { getSpreadByType } from '@/lib/tarot/spreads';
 import SharePoster from '@/components/tarot/SharePoster';
 import BreathingZen from '@/components/tarot/BreathingZen';
@@ -85,7 +84,7 @@ function ReadingDetailContent() {
   };
 
   return (
-    <main className={`flex-grow min-h-screen pb-28 flex flex-col items-center text-foreground relative overflow-y-auto transition-colors duration-1000 ${
+    <main className={`flex-grow min-h-screen pb-10 flex flex-col items-center text-foreground relative overflow-y-auto transition-colors duration-1000 ${
       activeElement ? elementMainBgs[activeElement] : 'bg-[#07090F]'
     }`}>
       {/* 四元素专属能量场背景发光圈 */}
@@ -100,31 +99,38 @@ function ReadingDetailContent() {
       {/* 顶部 Header */}
       <div className="w-full max-w-md px-6 pt-6 flex justify-between items-center z-10">
         <button
+          type="button"
           onClick={() => router.push('/journal')}
-          className="w-9 h-9 rounded-full border border-gold/15 bg-card/40 flex items-center justify-center text-gold/80 hover:border-gold/35 cursor-pointer transition-all duration-300"
+          aria-label="返回日记列表"
+          className="min-h-11 min-w-11 rounded-full border border-gold/15 bg-card/40 flex items-center justify-center text-gold/80 hover:border-gold/35 cursor-pointer transition-all duration-300"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-4 h-4" aria-hidden />
         </button>
         <span className="text-xs font-serif text-gold-muted/80 tracking-widest">
           日记详情
         </span>
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={handleToggleStar}
-            className={`w-9 h-9 rounded-full border flex items-center justify-center cursor-pointer transition-all duration-300 ${
+            className={`min-h-11 min-w-11 rounded-full border flex items-center justify-center cursor-pointer transition-all duration-300 ${
               isStarred
                 ? 'border-gold bg-gold/10 text-gold shadow-gold-glow'
                 : 'border-gold/15 bg-card/40 text-gold-muted/50 hover:border-gold/35 hover:text-gold'
             }`}
-            title={isStarred ? "取消心智高光收藏" : "加入心智高光收藏"}
+            title={isStarred ? '取消收藏' : '收藏本篇'}
+            aria-label={isStarred ? '取消收藏' : '收藏本篇'}
+            aria-pressed={isStarred}
           >
-            <Star className={`w-4 h-4 ${isStarred ? 'fill-gold' : ''}`} />
+            <Star className={`w-4 h-4 ${isStarred ? 'fill-gold' : ''}`} aria-hidden />
           </button>
           <button
+            type="button"
             onClick={handleDelete}
-            className="w-9 h-9 rounded-full border border-red-950/20 bg-red-950/5 flex items-center justify-center text-red-400/80 hover:border-red-900/40 hover:bg-red-950/25 cursor-pointer transition-all duration-300"
+            aria-label="删除本篇日记"
+            className="min-h-11 min-w-11 rounded-full border border-red-950/20 bg-red-950/5 flex items-center justify-center text-red-400/80 hover:border-red-900/40 hover:bg-red-950/25 cursor-pointer transition-all duration-300"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-4 h-4" aria-hidden />
           </button>
         </div>
       </div>
@@ -219,8 +225,6 @@ function ReadingDetailContent() {
           </div>
         )}
       </div>
-
-      <BottomNav />
 
       {/* 浮窗：海报分享 */}
       {showShare && (

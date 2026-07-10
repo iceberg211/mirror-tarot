@@ -239,27 +239,36 @@ export default function CardDeck({ neededCount, positions, onComplete }: CardDec
 
         {/* 3. 抽牌就绪：横向滚动牌龙 */}
         {shufflingState === 'ready' && (
-          <div className="w-full h-full overflow-x-auto no-scrollbar py-6 flex items-center scroll-smooth snap-x snap-mandatory">
-            <div className="flex items-center pl-[35vw] pr-[35vw] gap-0">
-              {cards.map((card) => {
-                const { index, isDrawn } = card;
+          <div className="relative w-full h-full">
+            {/* 边缘渐隐：提示可横向滚动 */}
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-10 bg-gradient-to-r from-background to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-10 bg-gradient-to-l from-background to-transparent" />
+            <div
+              className="w-full h-full overflow-x-auto no-scrollbar py-6 flex items-center scroll-smooth snap-x snap-mandatory"
+              role="listbox"
+              aria-label={`塔罗牌堆，还需抽取 ${neededCount - drawnCount} 张，可左右滑动后按回车选择`}
+            >
+              <div className="flex items-center pl-[35vw] pr-[35vw] gap-0">
+                {cards.map((card) => {
+                  const { index, isDrawn } = card;
 
-                const relativeIndex = index - 10.5;
-                const angle = relativeIndex * 2.2;
-                const yOffset = Math.pow(Math.abs(relativeIndex), 1.7) * 0.16;
+                  const relativeIndex = index - 10.5;
+                  const angle = relativeIndex * 2.2;
+                  const yOffset = Math.pow(Math.abs(relativeIndex), 1.7) * 0.16;
 
-                return (
-                  <CardWrapper
-                    key={index}
-                    index={index}
-                    isDrawn={isDrawn}
-                    angle={angle}
-                    yOffset={yOffset}
-                    triggerHaptic={triggerHaptic}
-                    onClick={() => handleDrawCard(index)}
-                  />
-                );
-              })}
+                  return (
+                    <CardWrapper
+                      key={index}
+                      index={index}
+                      isDrawn={isDrawn}
+                      angle={angle}
+                      yOffset={yOffset}
+                      triggerHaptic={triggerHaptic}
+                      onClick={() => handleDrawCard(index)}
+                    />
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -304,10 +313,13 @@ function CardWrapper({ index, isDrawn, angle, yOffset, triggerHaptic, onClick }:
         marginLeft: index === 0 ? '0px' : '-3.5rem', 
         zIndex: isDrawn ? 10 : hovered ? 100 : index,
       }}
+      role="option"
+      aria-selected={isDrawn}
     >
       <AnimatePresence>
         {!isDrawn && (
-          <motion.div
+          <motion.button
+            type="button"
             layoutId={`deck-card-${index}`}
             onClick={onClick}
             onMouseEnter={() => {
@@ -316,6 +328,7 @@ function CardWrapper({ index, isDrawn, angle, yOffset, triggerHaptic, onClick }:
             }}
             onMouseLeave={() => setHovered(false)}
             onTouchStart={handleTouch}
+            aria-label={`抽取第 ${index + 1} 张牌`}
             animate={{
               rotate: angle,
               y: yOffset,
@@ -328,7 +341,7 @@ function CardWrapper({ index, isDrawn, angle, yOffset, triggerHaptic, onClick }:
               transition: { duration: 0.22, ease: 'easeOut' }
             }}
             transition={{ type: 'spring', stiffness: 70, damping: 14 }}
-            className="w-[78px] h-[135px] rounded-lg cursor-pointer hover:shadow-gold-glow-lg border border-gold/10 relative"
+            className="w-[78px] h-[135px] rounded-lg cursor-pointer hover:shadow-gold-glow-lg border border-gold/10 relative bg-transparent p-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold/80"
           >
             <CardBack className="w-full h-full" />
 
@@ -360,7 +373,7 @@ function CardWrapper({ index, isDrawn, angle, yOffset, triggerHaptic, onClick }:
                 ))}
               </div>
             )}
-          </motion.div>
+          </motion.button>
         )}
       </AnimatePresence>
     </div>

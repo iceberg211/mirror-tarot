@@ -14,7 +14,11 @@ export default function HomePage() {
   const { theme } = useTheme();
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-y-auto bg-background pb-24 text-foreground transition-colors duration-400">
+    <main className={`relative flex min-h-screen flex-col overflow-y-auto bg-background text-foreground transition-colors duration-400 ${
+      flow.activeSection === 'inquiry'
+        ? 'pb-10'
+        : 'pb-[calc(6.5rem+env(safe-area-inset-bottom))]'
+    }`}>
       <div className={`pointer-events-none fixed inset-0 transition-all duration-400 ${
         theme === 'dark'
           ? 'bg-[radial-gradient(circle_at_50%_0%,rgba(201,167,106,0.10),transparent_35%),linear-gradient(180deg,rgba(7,9,15,0.15),rgba(5,6,10,0.96)_62%)]'
@@ -71,7 +75,8 @@ export default function HomePage() {
         <DreamJournalModal onClose={() => flow.setShowDreamModal(false)} />
       )}
 
-      <BottomNav />
+      {/* 发起问牌时隐藏底栏，减少长表单被遮挡 */}
+      {flow.activeSection === 'overview' && <BottomNav />}
     </main>
   );
 }

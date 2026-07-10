@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  generateCacheKey,
+  generateCacheKeyAsync,
   getCachedRawText,
   getCachedReading,
   JournalEntry,
@@ -12,6 +12,11 @@ import {
 } from '@/lib/db/localJournal';
 import { useAudio } from '@/hooks/useAudio';
 import { AI_PROMPT_VERSIONS } from '@/lib/ai/prompts';
+import { getAuthHeaders } from '@/lib/ai/authHeaders';
+import {
+  clientInsertGeneration,
+  clientUpsertActionItem,
+} from '@/lib/db/client-observability';
 import { useThrottledStreamText } from '@/hooks/useThrottledStreamText';
 import { ParsedReading } from '@/lib/tarot/types';
 import { buildFollowUpSuggestions, getCardElement, parseStreamingReading } from '@/lib/tarot/utils';
@@ -92,7 +97,7 @@ export function useReadingGeneration(options: {
       generationAbortRef.current = controller;
     }
 
-    const cacheKey = generateCacheKey(
+    const cacheKey = await generateCacheKeyAsync(
       AI_PROMPT_VERSIONS.reading,
       entry.question,
       entry.mood,
@@ -100,6 +105,7 @@ export function useReadingGeneration(options: {
       entry.cards
     );
 
+    // 仅自动恢复使用缓存；用户显式重新生成跳过
     const cachedRawText = forceRegenerate ? null : getCachedRawText(cacheKey);
     const cachedReading = forceRegenerate ? null : getCachedReading(cacheKey);
 
@@ -151,9 +157,11 @@ export function useReadingGeneration(options: {
           ? crypto.randomUUID()
           : `${entry.id}-${Date.now()}`;
 
+      const startedAt = Date.now();
+      const authHeaders = await getAuthHeaders();
       const response = await fetch('/api/reading', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({
           readingId: entry.id,
           question: entry.question,
@@ -220,6 +228,25 @@ export function useReadingGeneration(options: {
         setCachedReading(cacheKey, AI_PROMPT_VERSIONS.reading, text, finalReading);
         setEntry((prev) => (prev ? { ...prev, reading: finalReading } : null));
         markOnboarding({ firstReadingCompleted: true });
+
+        // 无 service role 时的 client 侧 observability 双写（fail-soft）
+        void clientInsertGeneration({
+          readingId: entry.id,
+          requestId: response.headers.get('X-Mirror-AI-Request-Id'),
+          model: response.headers.get('X-Mirror-AI-Model'),
+          promptVersion: response.headers.get('X-Mirror-AI-Prompt-Version'),
+          inputHash: response.headers.get('X-Mirror-Input-Hash'),
+          safetyLevel: response.headers.get('X-Mirror-AI-Safety-Level'),
+          durationMs: Date.now() - startedAt,
+          status: response.headers.get('X-Mirror-AI-Safety') === 'blocked' ? 'blocked' : 'success',
+        });
+        if (finalReading.actionAdvice) {
+          void clientUpsertActionItem({
+            readingId: entry.id,
+            seedText: finalReading.actionAdvice.slice(0, 120),
+            status: 'pending',
+          });
+        }
       } else {
         throw new Error('本地日记更新失败');
       }

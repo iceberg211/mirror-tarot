@@ -18,182 +18,133 @@ import {
 } from '@/lib/db/localJournal';
 import { useAudio } from '@/hooks/useAudio';
 import { moodConfigs } from '@/lib/tarot/moods';
+import { useClientReady } from '@/hooks/useClientReady';
 
 export function useJournalData() {
-  const [entries, setEntries] = useState<JournalEntry[]>(() => getLocalReadings());
-  const [checkins, setCheckins] = useState<CheckInEntry[]>(() => getLocalCheckIns());
+  const ready = useClientReady();
+  // 本地数据版本戳：同步/导入后递增，触发 useMemo 重读
+  const [dataEpoch, setDataEpoch] = useState(0);
   const [showCheckInPicker, setShowCheckInPicker] = useState(false);
-
-  // 页签控制与分析数据
   const [activeTab, setActiveTab] = useState<'list' | 'analytics'>('list');
-  const [analytics, setAnalytics] = useState<JournalAnalytics | null>(() => getJournalAnalytics());
-  const [monthlyReport, setMonthlyReport] = useState(() => getLocalMonthlyReport());
   const [generatingReport, setGeneratingReport] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
-
-  // 备份导入导出状态
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
-
   const { playAmbient, stopAmbient } = useAudio();
-
-  // 筛选状态
   const [selectedSpread, setSelectedSpread] = useState<string>('all');
   const [selectedMood, setSelectedMood] = useState<string>('all');
   const [dreamOnly, setDreamOnly] = useState<boolean>(false);
 
-  const refreshData = useCallback(() => {
-    const readings = getLocalReadings();
-    setEntries(readings);
+  const bump = useCallback(() => setDataEpoch((n) => n + 1), []);
 
-    const history = getLocalCheckIns();
-    setCheckins(history);
+  const entries = useMemo<JournalEntry[]>(() => {
+    if (!ready) return [];
+    void dataEpoch;
+    return getLocalReadings();
+  }, [ready, dataEpoch]);
 
-    const anaData = getJournalAnalytics(readings, history);
-    setAnalytics(anaData);
+  const checkins = useMemo<CheckInEntry[]>(() => {
+    if (!ready) return [];
+    void dataEpoch;
+    return getLocalCheckIns();
+  }, [ready, dataEpoch]);
 
-    const rpt = getLocalMonthlyReport();
-    setMonthlyReport(rpt);
-  }, []);
+  const analytics = useMemo<JournalAnalytics | null>(() => {
+    if (!ready) return null;
+    void dataEpoch;
+    return getJournalAnalytics(entries, checkins);
+  }, [ready, dataEpoch, entries, checkins]);
 
-  // 获取数据
+  const monthlyReport = useMemo(() => {
+    if (!ready) return '';
+    void dataEpoch;
+    return getLocalMonthlyReport();
+  }, [ready, dataEpoch]);
+
+  // 仅异步云同步后 bump，避免 effect 内同步 setState
   useEffect(() => {
+    if (!ready) return;
     let cancelled = false;
-
-    // 触发云端数据同步并在同步完成后刷新 UI
     syncJournalData()
       .then((success) => {
-        if (cancelled) return;
-        if (success) {
-          refreshData();
-        }
+        if (!cancelled && success) bump();
       })
       .catch((err) => {
         console.error('Trigger sync error on mount:', err);
       });
-
     return () => {
       cancelled = true;
     };
-  }, [refreshData]);
+  }, [ready, bump]);
 
-  // 执行筛选 - 改用 useMemo 以解决 react-hooks/set-state-in-effect 报错并优化性能
   const filteredEntries = useMemo(() => {
-    let result = [...entries];
+    return entries.filter((entry) => {
+      if (selectedSpread !== 'all' && entry.spreadType !== selectedSpread) return false;
+      if (selectedMood !== 'all' && entry.mood !== selectedMood) return false;
+      if (dreamOnly && !entry.isDream) return false;
+      return true;
+    });
+  }, [entries, selectedSpread, selectedMood, dreamOnly]);
 
-    if (selectedSpread !== 'all') {
-      result = result.filter((e) => e.spreadType === selectedSpread);
-    }
-
-    if (selectedMood !== 'all') {
-      result = result.filter((e) => e.mood === selectedMood);
-    }
-
-    if (dreamOnly) {
-      result = result.filter((e) => !!e.isDream);
-    }
-
-    return result;
-  }, [selectedSpread, selectedMood, dreamOnly, entries]);
-
-  const handleCheckIn = (mood: string) => {
+  const handleCheckIn = useCallback((mood: string) => {
     saveLocalCheckIn(mood);
+    bump();
     setShowCheckInPicker(false);
-    refreshData();
-  };
+  }, [bump]);
 
-  const handleGenerateReport = async () => {
-    if (generatingReport || !analytics) return;
-    let reportFlushTimer: number | null = null;
-    let text = '';
-
-    const flushReportText = () => {
-      if (reportFlushTimer !== null) {
-        window.clearTimeout(reportFlushTimer);
-        reportFlushTimer = null;
-      }
-      setMonthlyReport(text);
-    };
-
-    const scheduleReportFlush = () => {
-      if (reportFlushTimer !== null) return;
-      reportFlushTimer = window.setTimeout(() => {
-        reportFlushTimer = null;
-        setMonthlyReport(text);
-      }, 120);
-    };
-
+  const handleGenerateReport = useCallback(async () => {
+    if (generatingReport) return;
     setGeneratingReport(true);
-    setMonthlyReport('');
     setReportError(null);
     playAmbient();
-
     try {
+      const topCards = analytics?.topCards?.slice(0, 5).map((c) => ({
+        zhName: c.zhName,
+        count: c.count,
+      })) || [];
       const response = await fetch('/api/journal/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          checkins,
-          readings: entries.slice(0, 20),
-          topCards: analytics.topCards,
+          checkins: checkins.slice(-30),
+          readings: entries.slice(0, 20).map((r) => ({
+            question: r.question,
+            mood: r.mood,
+            cards: r.cards.map((c) => ({
+              zhName: c.zhName,
+              orientation: c.orientation,
+            })),
+          })),
+          topCards,
         }),
       });
-
-      if (!response.ok) {
-        let errMsg = `HTTP 错误！状态码: ${response.status}`;
-        try {
-          const errData = await response.json();
-          errMsg = errData.error || errMsg;
-        } catch {
-          try {
-            const txt = await response.text();
-            if (txt) errMsg = txt;
-          } catch {}
-        }
-        throw new Error(errMsg);
+      if (!response.ok || !response.body) {
+        throw new Error('月报生成失败');
       }
-
-      if (!response.body) throw new Error('流式读取器未就绪 (ReadableStream not supported)');
-
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let text = '';
       let done = false;
-
       while (!done) {
         const { value, done: isDone } = await reader.read();
         done = isDone;
-        const chunk = decoder.decode(value, { stream: !done });
-        text += chunk;
-        scheduleReportFlush();
+        text += decoder.decode(value, { stream: !done });
       }
-      flushReportText();
-
-      if (text.trim().length < 40) {
-        throw new Error('AI 分析生成的文本过短，请重试');
-      }
-
       saveLocalMonthlyReport(text);
+      bump();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setReportError(msg || '生成失败');
+    } finally {
       stopAmbient();
-      setGeneratingReport(false);
-    } catch (err) {
-      if (reportFlushTimer !== null) {
-        window.clearTimeout(reportFlushTimer);
-      }
-      console.error('Generate report error:', err);
-      stopAmbient();
-      const errMsg = err instanceof Error ? err.message : String(err);
-      setReportError(errMsg || '生成潜意识报告失败');
       setGeneratingReport(false);
     }
-  };
+  }, [analytics, checkins, entries, generatingReport, playAmbient, stopAmbient, bump]);
 
   const handleExportData = () => {
     try {
       const dataStr = exportJournalData();
-      if (!dataStr) return;
-      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-
-      const exportFileDefaultName = `mirror_tarot_backup_${getLocalDateString()}.json`;
-
+      const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+      const exportFileDefaultName = `mirror-tarot-backup-${getLocalDateString()}.json`;
       const linkElement = document.createElement('a');
       linkElement.setAttribute('href', dataUri);
       linkElement.setAttribute('download', exportFileDefaultName);
@@ -212,7 +163,7 @@ export function useJournalData() {
         const ok = importJournalData(resultText);
         if (ok) {
           setImportStatus({ type: 'success', message: '日记备份已校验、合并并导入。' });
-          refreshData();
+          bump();
         } else {
           setImportStatus({ type: 'error', message: '导入失败：文件格式或版本不合规。' });
         }
@@ -223,22 +174,17 @@ export function useJournalData() {
     reader.readAsText(file);
   };
 
-  // 计算最近 7 天的打卡状态
   const checkInDays = useMemo(() => {
     return Array.from({ length: 7 }).map((_, i) => {
       const date = new Date();
       date.setDate(date.getDate() - (6 - i));
       const dateStr = getLocalDateString(date);
-      
       const checkIn = checkins.find((c) => c.date === dateStr);
       const isToday = dateStr === getLocalDateString();
-      
       const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
       const dayLabel = isToday ? '今' : dayNames[date.getDay()];
-      
       const moodConfig = moodConfigs.find((m) => m.name === checkIn?.mood);
       const moodLabel = moodConfig ? moodConfig.label : (checkIn?.mood ? checkIn.mood.charAt(0) : '');
-
       return {
         dateStr,
         dayLabel,
@@ -251,6 +197,7 @@ export function useJournalData() {
   }, [checkins]);
 
   return {
+    ready,
     entries,
     filteredEntries,
     checkins,

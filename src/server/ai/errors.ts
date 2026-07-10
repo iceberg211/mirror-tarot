@@ -1,5 +1,6 @@
 export type AiErrorCode =
   | 'VALIDATION_ERROR'
+  | 'UNAUTHORIZED'
   | 'RATE_LIMITED'
   | 'PAYLOAD_TOO_LARGE'
   | 'AI_TIMEOUT'

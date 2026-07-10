@@ -79,6 +79,7 @@ function isJournalEntry(value: unknown): value is JournalEntry {
     isParsedReading(value.reading) &&
     typeof value.createdAt === 'string' &&
     !Number.isNaN(new Date(value.createdAt).getTime())
+    // revision / updatedAt 可选，normalize 时补齐
   );
 }
 
