@@ -39,7 +39,7 @@ export default function MindOrbitWordCloud({ entries }: MindOrbitWordCloudProps)
 
       // 1. 合并最近所有日记的提问、情绪和冥想感悟文本
       const combinedText = recentReadings
-        .map((r) => `${r.question} ${r.mood} ${r.userNotes || ''} ${(r as any).dreamContext?.analysis || ''}`)
+        .map((r) => `${r.question} ${r.mood} ${r.userNotes || ''} ${r.dreamContext?.analysis || ''}`)
         .join(' ');
 
       // 2. 嗅探词频

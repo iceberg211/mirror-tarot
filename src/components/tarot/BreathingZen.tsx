@@ -1,15 +1,16 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Volume2, VolumeX, Sparkles } from 'lucide-react';
 import { useAudio } from '@/hooks/useAudio';
 import { saveLocalZenReading, getLocalCheckIns, getLocalDateString } from '@/lib/db/localJournal';
+import type { SelectedCard } from '@/lib/tarot/types';
 
 interface BreathingZenProps {
   onClose: () => void;
   element?: 'water' | 'fire' | 'wind' | 'earth' | null;
-  guardianCard?: any;
+  guardianCard?: Pick<SelectedCard, 'zhName' | 'name' | 'id' | 'image'> | null;
 }
 
 type BreathPhase = 'inhale' | 'holdIn' | 'exhale' | 'holdOut';

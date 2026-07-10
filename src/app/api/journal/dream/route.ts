@@ -1,6 +1,17 @@
 import { NextResponse } from 'next/server';
 import { createAIJsonCompletion } from '@/lib/ai/client';
 import { AI_PROMPT_VERSIONS, buildDreamSystemPrompt, buildDreamUserPrompt } from '@/lib/ai/prompts';
+import { LangChainResponseFormatError } from '@/lib/ai/langchainAgent';
+import {
+  assertIdempotency,
+  completeIdempotentRequest,
+  enforceRateLimit,
+  parseJsonBody,
+  releaseIdempotentRequest,
+  withRateLimitHeaders,
+} from '@/server/ai/http';
+import { handleRouteError, jsonError } from '@/server/ai/errors';
+import { dreamRequestSchema } from '@/server/ai/schemas/requests';
 
 interface DreamAnalysisResult {
   dreamAnalysis: string;
@@ -47,15 +58,17 @@ function isDreamAnalysisResult(value: unknown): value is DreamAnalysisResult {
 }
 
 export async function POST(req: Request) {
-  try {
-    const { dreamText } = await req.json();
+  let idempotencyKey: string | undefined;
 
-    if (!dreamText || !dreamText.trim()) {
-      return NextResponse.json({ error: 'Dream text is empty' }, { status: 400 });
-    }
+  try {
+    const rate = enforceRateLimit(req, 'dream');
+    const body = await parseJsonBody(req, dreamRequestSchema);
+    idempotencyKey = body.idempotencyKey;
+    assertIdempotency(idempotencyKey, 'dream');
 
     const systemPrompt = await buildDreamSystemPrompt();
-    const userPrompt = await buildDreamUserPrompt(dreamText.trim());
+    const userPrompt = await buildDreamUserPrompt(body.dreamText);
+
     const result = await createAIJsonCompletion<DreamAnalysisResult>(
       [
         { role: 'system', content: systemPrompt },
@@ -68,26 +81,32 @@ export async function POST(req: Request) {
         validate: isDreamAnalysisResult,
       }
     );
-    const normalized = normalizeDreamAnalysisResult(result.data);
 
+    const normalized = normalizeDreamAnalysisResult(result.data);
     if (!normalized) {
-      return NextResponse.json({
-        success: false,
-        error: 'AI 返回的数据结构不正确，请重新尝试',
-        requestId: result.meta.requestId,
-        rawContent: result.rawContent,
-      }, { status: 500 });
+      releaseIdempotentRequest(idempotencyKey);
+      return withRateLimitHeaders(
+        jsonError('AI_FORMAT_ERROR', 'AI 返回的数据结构不正确，请重新尝试', 500, {
+          requestId: result.meta.requestId,
+        }),
+        rate
+      );
     }
 
-    return NextResponse.json({
+    completeIdempotentRequest(idempotencyKey);
+    const response = NextResponse.json({
       success: true,
       ...normalized,
       meta: result.meta,
     });
-
+    return withRateLimitHeaders(response, rate);
   } catch (error) {
-    console.error('API /api/journal/dream Error:', error);
-    const errMsg = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: errMsg }, { status: 500 });
+    releaseIdempotentRequest(idempotencyKey);
+    if (error instanceof LangChainResponseFormatError) {
+      return jsonError('AI_FORMAT_ERROR', 'AI 返回格式错误，请重新尝试', 500, {
+        requestId: error.requestId,
+      });
+    }
+    return handleRouteError(error, 'API /api/journal/dream');
   }
 }

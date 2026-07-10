@@ -37,15 +37,6 @@ const DETAIL_MODE_STORAGE_KEY = 'mirror_tarot_reading_detail_mode';
 
 type ResultTabId = typeof TAB_CONFIG[number]['id'];
 
-interface MeaningsModuleType {
-  getCardMeaning: (cardId: string, orientation: 'upright' | 'reversed') => {
-    general: string;
-    love: string;
-    career: string;
-    advice: string;
-  };
-}
-
 const ReadingCardInsight = memo(function ReadingCardInsight({
   card,
   index,

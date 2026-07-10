@@ -1,21 +1,34 @@
 import { NextResponse } from 'next/server';
 import { drawCards } from '@/lib/tarot/drawCards';
-import { SpreadType } from '@/lib/tarot/types';
+import { spreadTypeSchema } from '@/server/ai/schemas/requests';
+import { enforceRateLimit, withRateLimitHeaders } from '@/server/ai/http';
+import { handleRouteError, jsonError } from '@/server/ai/errors';
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const spreadType = (searchParams.get('spreadType') || 'three_cards') as SpreadType;
-  const customPositionsParam = searchParams.get('customPositions') || '';
-  const customPositions = customPositionsParam
-    .split(',')
-    .map((position) => position.trim())
-    .filter(Boolean);
-
   try {
-    const cards = drawCards(spreadType, customPositions);
-    return NextResponse.json({ success: true, cards });
+    const rate = enforceRateLimit(request, 'draw');
+    const { searchParams } = new URL(request.url);
+    const spreadTypeRaw = searchParams.get('spreadType') || 'three_cards';
+    const parsedSpread = spreadTypeSchema.safeParse(spreadTypeRaw);
+
+    if (!parsedSpread.success) {
+      return withRateLimitHeaders(
+        jsonError('VALIDATION_ERROR', `Unknown spread type: ${spreadTypeRaw}`, 400),
+        rate
+      );
+    }
+
+    const customPositionsParam = searchParams.get('customPositions') || '';
+    const customPositions = customPositionsParam
+      .split(',')
+      .map((position) => position.trim())
+      .filter(Boolean)
+      .slice(0, 10);
+
+    const cards = drawCards(parsedSpread.data, customPositions);
+    const response = NextResponse.json({ success: true, cards });
+    return withRateLimitHeaders(response, rate);
   } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ success: false, error: errMsg }, { status: 400 });
+    return handleRouteError(error, 'API /api/reading/draw');
   }
 }

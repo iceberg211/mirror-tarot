@@ -1,51 +1,41 @@
 import { createAIChatStream } from '@/lib/ai/client';
 import { AI_PROMPT_VERSIONS, buildMonthlyReportPrompt } from '@/lib/ai/prompts';
-
-interface ReportCheckIn {
-  date: string;
-  mood: string;
-}
-
-interface ReportCard {
-  zhName: string;
-  orientation: 'upright' | 'reversed';
-}
-
-interface ReportReading {
-  question: string;
-  mood: string;
-  cards: ReportCard[];
-}
-
-interface ReportTopCard {
-  zhName: string;
-  count: number;
-}
-
-interface ReportRequestBody {
-  checkins?: ReportCheckIn[];
-  readings?: ReportReading[];
-  topCards?: ReportTopCard[];
-}
+import {
+  assertIdempotency,
+  completeIdempotentRequest,
+  enforceRateLimit,
+  parseJsonBody,
+  releaseIdempotentRequest,
+  withRateLimitHeaders,
+} from '@/server/ai/http';
+import { handleRouteError } from '@/server/ai/errors';
+import { reportRequestSchema } from '@/server/ai/schemas/requests';
 
 export async function POST(req: Request) {
-  try {
-    const { checkins = [], readings = [], topCards = [] } = (await req.json()) as ReportRequestBody;
-    const promptText = await buildMonthlyReportPrompt({ checkins, readings, topCards });
+  let idempotencyKey: string | undefined;
 
-    // 一键调起公用流请求与 SSE 解析助手
-    return await createAIChatStream([{ role: 'user', content: promptText }], {
+  try {
+    const rate = enforceRateLimit(req, 'report');
+    const body = await parseJsonBody(req, reportRequestSchema);
+    idempotencyKey = body.idempotencyKey;
+    assertIdempotency(idempotencyKey, 'monthly-report');
+
+    const promptText = await buildMonthlyReportPrompt({
+      checkins: body.checkins,
+      readings: body.readings,
+      topCards: body.topCards,
+    });
+
+    const response = await createAIChatStream([{ role: 'user', content: promptText }], {
       temperature: 0.8,
       requestName: 'monthly-report',
       promptVersion: AI_PROMPT_VERSIONS.monthlyReport,
     });
 
+    completeIdempotentRequest(idempotencyKey);
+    return withRateLimitHeaders(response, rate);
   } catch (error) {
-    console.error('API /api/journal/report Error:', error);
-    const errMsg = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ error: errMsg }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    releaseIdempotentRequest(idempotencyKey);
+    return handleRouteError(error, 'API /api/journal/report');
   }
 }

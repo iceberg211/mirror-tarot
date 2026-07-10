@@ -7,6 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "ci": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "db:init": "node scripts/init-supabase.cjs",
     "db:check": "node scripts/check-supabase.cjs",
     "db:check:write": "node scripts/check-supabase.cjs --write"
@@ -33,6 +37,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }

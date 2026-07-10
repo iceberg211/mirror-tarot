@@ -60,7 +60,7 @@ export default function ZenPage() {
       const recentReadings = readings.filter((r) => nowMs - new Date(r.createdAt).getTime() <= 7 * 24 * 60 * 60 * 1000);
       for (const r of recentReadings) {
         if (!Array.isArray(r.cards)) continue;
-        const major = r.cards.find((c) => c.id.match(/^\d{2}-/) || (c as any).arcana === 'major');
+        const major = r.cards.find((c) => c.arcana === 'major' || /^\d{2}-/.test(c.id));
         if (major) return major;
       }
     } catch (e) {

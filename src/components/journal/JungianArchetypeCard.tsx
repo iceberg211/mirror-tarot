@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Sparkles, Moon } from 'lucide-react';
+import { Moon } from 'lucide-react';
 import { JournalEntry } from '@/lib/db/localJournal';
 
 interface JungianArchetypeCardProps {
@@ -87,7 +87,7 @@ export default function JungianArchetypeCard({ entries }: JungianArchetypeCardPr
       recentReadings.forEach((reading) => {
         if (!Array.isArray(reading.cards)) return;
         reading.cards.forEach((card) => {
-          const isMajor = card.id.match(/^\d{2}-/) || (card as any).arcana === 'major';
+          const isMajor = card.arcana === 'major' || /^\d{2}-/.test(card.id);
           if (isMajor) {
             majorCardCounts[card.id] = (majorCardCounts[card.id] || 0) + 1;
             totalMajorCount++;
@@ -111,10 +111,11 @@ export default function JungianArchetypeCard({ entries }: JungianArchetypeCardPr
 
         let topElement: 'water' | 'fire' | 'wind' | 'earth' = 'water';
         let maxCount = 0;
-        Object.entries(elementCounts).forEach(([el, count]) => {
+        (Object.keys(elementCounts) as Array<'water' | 'fire' | 'wind' | 'earth'>).forEach((el) => {
+          const count = elementCounts[el];
           if (count > maxCount) {
             maxCount = count;
-            topElement = el as any;
+            topElement = el;
           }
         });
 

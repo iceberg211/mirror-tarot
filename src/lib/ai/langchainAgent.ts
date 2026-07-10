@@ -1,6 +1,5 @@
-import { AIMessage, AIMessageChunk } from '@langchain/core/messages';
+import { AIMessage, AIMessageChunk, HumanMessage, SystemMessage, type BaseMessage } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
-import { createAgent } from 'langchain';
 import { AIConfig, AIRequestOptions, ChatMessage, getAIConfig } from './config';
 
 export interface LangChainAgentMeta {
@@ -78,31 +77,6 @@ function createAIRequestId(requestName: string): string {
   return `${requestName}-${suffix}`;
 }
 
-function isAgentMessage(
-  message: ChatMessage
-): message is { role: 'user' | 'assistant'; content: string } {
-  return message.role !== 'system';
-}
-
-function splitSystemPrompt(messages: ChatMessage[]): {
-  systemPrompt: string;
-  messages: { role: 'user' | 'assistant'; content: string }[];
-} {
-  const systemPrompt = messages
-    .filter((message) => message.role === 'system')
-    .map((message) => message.content)
-    .join('\n\n');
-
-  const agentMessages = messages
-    .filter(isAgentMessage)
-    .map((message) => ({
-      role: message.role,
-      content: message.content,
-    }));
-
-  return { systemPrompt, messages: agentMessages };
-}
-
 function createModel(config: AIConfig, options: Required<AIRequestOptions>) {
   return new ChatOpenAI({
     apiKey: config.apiKey,
@@ -115,18 +89,12 @@ function createModel(config: AIConfig, options: Required<AIRequestOptions>) {
   });
 }
 
-function createMirrorAgent(systemPrompt: string, options: Required<AIRequestOptions>) {
-  const config = assertAIConfig();
-  const model = createModel(config, options);
-
-  return {
-    agent: createAgent({
-      model,
-      tools: [],
-      systemPrompt,
-    }),
-    modelName: config.modelName,
-  };
+function toLangChainMessages(messages: ChatMessage[]): BaseMessage[] {
+  return messages.map((message) => {
+    if (message.role === 'system') return new SystemMessage(message.content);
+    if (message.role === 'assistant') return new AIMessage(message.content);
+    return new HumanMessage(message.content);
+  });
 }
 
 function extractTextContent(content: unknown): string {
@@ -148,22 +116,6 @@ function extractTextContent(content: unknown): string {
   return '';
 }
 
-function getLastAIText(messages: unknown): string {
-  if (!Array.isArray(messages)) return '';
-
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message instanceof AIMessage) {
-      return extractTextContent(message.content);
-    }
-    if (message && typeof message === 'object' && 'content' in message) {
-      return extractTextContent((message as { content?: unknown }).content);
-    }
-  }
-
-  return '';
-}
-
 function stripJsonMarkdown(content: string): string {
   let cleanedContent = content.trim();
 
@@ -177,37 +129,42 @@ function stripJsonMarkdown(content: string): string {
   return cleanedContent;
 }
 
+function buildMetaHeaders(options: Required<AIRequestOptions>, requestId: string, modelName: string): HeadersInit {
+  return {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Mirror-AI-Request-Id': requestId,
+    'X-Mirror-AI-Model': modelName,
+    'X-Mirror-AI-Provider': 'langchain-chat-openai',
+    ...(options.promptVersion ? { 'X-Mirror-AI-Prompt-Version': options.promptVersion } : {}),
+  };
+}
+
+/**
+ * 直接使用 ChatOpenAI 流式生成（无 Agent 循环、无 tools）。
+ */
 export async function createLangChainChatStream(
   inputMessages: ChatMessage[],
   optionsInput: number | AIRequestOptions = 0.7
 ): Promise<Response> {
   const options = normalizeOptions(optionsInput);
   const requestId = createAIRequestId(options.requestName);
-  const { systemPrompt, messages } = splitSystemPrompt(inputMessages);
-  const { agent, modelName } = createMirrorAgent(systemPrompt, options);
+  const config = assertAIConfig();
+  const model = createModel(config, options);
+  const lcMessages = toLangChainMessages(inputMessages);
   const encoder = new TextEncoder();
 
   const textStream = new ReadableStream({
     async start(controller) {
       try {
-        const run = await agent.streamEvents(
-          { messages },
-          {
-            version: 'v3',
-            configurable: {
-              thread_id: requestId,
-            },
-          }
-        );
-
-        for await (const message of run.messages) {
-          for await (const token of message.text) {
-            if (token) {
-              controller.enqueue(encoder.encode(token));
-            }
+        const stream = await model.stream(lcMessages);
+        for await (const chunk of stream) {
+          const token = extractTextContent(chunk.content);
+          if (token) {
+            controller.enqueue(encoder.encode(token));
           }
         }
-
         controller.close();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -217,15 +174,7 @@ export async function createLangChainChatStream(
   });
 
   return new Response(textStream, {
-    headers: {
-      'Content-Type': 'text/plain; charset=utf-8',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'X-Mirror-AI-Request-Id': requestId,
-      'X-Mirror-AI-Model': modelName,
-      'X-Mirror-AI-Provider': 'langchain-create-agent',
-      ...(options.promptVersion ? { 'X-Mirror-AI-Prompt-Version': options.promptVersion } : {}),
-    },
+    headers: buildMetaHeaders(options, requestId, config.modelName),
   });
 }
 
@@ -237,19 +186,13 @@ export async function createLangChainJsonCompletion<T>(
 ): Promise<LangChainJsonResult<T>> {
   const options = normalizeOptions(optionsInput);
   const requestId = createAIRequestId(options.requestName);
-  const { systemPrompt, messages } = splitSystemPrompt(inputMessages);
-  const { agent, modelName } = createMirrorAgent(systemPrompt, options);
+  const config = assertAIConfig();
+  const model = createModel(config, options);
+  const lcMessages = toLangChainMessages(inputMessages);
 
   try {
-    const result = await agent.invoke(
-      { messages },
-      {
-        configurable: {
-          thread_id: requestId,
-        },
-      }
-    );
-    const rawContent = getLastAIText(result.messages);
+    const result = await model.invoke(lcMessages);
+    const rawContent = extractTextContent(result.content);
     const cleanedContent = stripJsonMarkdown(rawContent);
     let parsed: unknown;
 
@@ -268,7 +211,7 @@ export async function createLangChainJsonCompletion<T>(
       rawContent: cleanedContent,
       meta: {
         requestId,
-        modelName,
+        modelName: config.modelName,
         promptVersion: options.promptVersion || undefined,
       },
     };
@@ -285,3 +228,5 @@ export async function createLangChainJsonCompletion<T>(
 export function isAIMessageChunk(value: unknown): value is AIMessageChunk {
   return value instanceof AIMessageChunk;
 }
+
+export { LangChainRequestError, LangChainResponseFormatError };

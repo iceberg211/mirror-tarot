@@ -1,59 +1,60 @@
 import { createAIChatStream } from '@/lib/ai/client';
 import { AI_PROMPT_VERSIONS, buildReadingSystemPrompt, buildReadingUserPrompt } from '@/lib/ai/prompts';
-import { getCardMeaning } from '@/lib/tarot/meanings';
-import { getSpreadByType } from '@/lib/tarot/spreads';
-import { SelectedCard } from '@/lib/tarot/types';
+import {
+  assertIdempotency,
+  completeIdempotentRequest,
+  enforceRateLimit,
+  parseJsonBody,
+  releaseIdempotentRequest,
+  withRateLimitHeaders,
+} from '@/server/ai/http';
+import { handleRouteError } from '@/server/ai/errors';
+import { readingRequestSchema } from '@/server/ai/schemas/requests';
+import { resolveCardsForSpread } from '@/server/readings/card-repository';
 
 export async function POST(req: Request) {
+  let idempotencyKey: string | undefined;
+
   try {
-    const { question, mood, spreadType, cards, style = 'gentle', historyContext = '', recentMoodState = '' } = await req.json();
+    const rate = enforceRateLimit(req, 'reading');
+    const body = await parseJsonBody(req, readingRequestSchema);
+    idempotencyKey = body.idempotencyKey;
+    assertIdempotency(idempotencyKey, 'reading');
 
-    if (!question || !spreadType || !cards || !Array.isArray(cards)) {
-      return new Response(JSON.stringify({ error: 'Missing required fields' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
+    const { spreadName, cardsWithMeanings } = resolveCardsForSpread(body.spreadType, body.cards);
 
-    const spread = getSpreadByType(spreadType);
-    if (!spread) {
-      return new Response(JSON.stringify({ error: `Unknown spread type: ${spreadType}` }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // 装配带有具体牌义快照的上下文，发给大模型
-    const cardsWithMeanings = cards.map((c: SelectedCard) => ({
-      card: c,
-      meaning: getCardMeaning(c.id, c.orientation),
-    }));
-
-    // 获取北京时间并判断是否处于深夜时间段 (23点到凌晨4点)
     const shanghaiTimeStr = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
     const localHour = new Date(shanghaiTimeStr).getHours();
     const isLateNight = localHour >= 23 || localHour < 4;
 
-    // 生成分离架构的 System 与 User Prompts
-    const systemPrompt = await buildReadingSystemPrompt(cards.length, style);
-    const userPrompt = await buildReadingUserPrompt(question, mood, spread.name, cardsWithMeanings, isLateNight, historyContext, recentMoodState || undefined);
+    // 不接受客户端 historyContext；仅使用服务端可校验的 recentMoodState 枚举
+    const systemPrompt = await buildReadingSystemPrompt(cardsWithMeanings.length, body.style);
+    const userPrompt = await buildReadingUserPrompt(
+      body.question,
+      body.mood,
+      spreadName,
+      cardsWithMeanings,
+      isLateNight,
+      '',
+      body.recentMoodState
+    );
 
-    // 调起公用流请求与 SSE 解析助手，传递双消息角色，提高生成质量与输出格式稳定性
-    return await createAIChatStream([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ], {
-      temperature: 0.75,
-      requestName: 'reading',
-      promptVersion: AI_PROMPT_VERSIONS.reading,
-    });
+    const response = await createAIChatStream(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      {
+        temperature: 0.75,
+        requestName: 'reading',
+        promptVersion: AI_PROMPT_VERSIONS.reading,
+      }
+    );
 
+    completeIdempotentRequest(idempotencyKey);
+    return withRateLimitHeaders(response, rate);
   } catch (error) {
-    console.error('API /api/reading Error:', error);
-    const errMsg = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ error: errMsg }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    releaseIdempotentRequest(idempotencyKey);
+    return handleRouteError(error, 'API /api/reading');
   }
 }
