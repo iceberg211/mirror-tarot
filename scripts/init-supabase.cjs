@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 
 const fs = require('fs');
+const path = require('path');
 const { spawnSync } = require('child_process');
 
 const migrationsDir = 'supabase/migrations';
@@ -27,70 +28,121 @@ function loadLocalEnv() {
   return env;
 }
 
-function main() {
-  const localEnv = loadLocalEnv();
-  const databaseUrl = process.env.SUPABASE_DB_URL || localEnv.SUPABASE_DB_URL || process.env.DATABASE_URL;
-
+function listMigrationFiles() {
   if (!fs.existsSync(migrationsDir)) {
-    console.error(`找不到迁移目录：${migrationsDir}`);
-    process.exitCode = 1;
-    return;
+    throw new Error(`找不到迁移目录：${migrationsDir}`);
   }
 
   const migrationFiles = fs
     .readdirSync(migrationsDir)
     .filter((file) => file.endsWith('.sql'))
     .sort()
-    .map((file) => `${migrationsDir}/${file}`);
+    .map((file) => path.join(migrationsDir, file));
 
   if (migrationFiles.length === 0) {
-    console.error(`迁移目录中没有 SQL 文件：${migrationsDir}`);
-    process.exitCode = 1;
-    return;
+    throw new Error(`迁移目录中没有 SQL 文件：${migrationsDir}`);
   }
 
-  if (!databaseUrl) {
-    console.error('缺少 SUPABASE_DB_URL。');
-    console.error('');
-    console.error('方式一：打开 Supabase SQL Editor，复制并执行：');
-    migrationFiles.forEach((file) => console.error(`  ${file}`));
-    console.error('');
-    console.error('方式二：从 Supabase Project Settings -> Database 复制连接串后运行：');
-    console.error("  SUPABASE_DB_URL='postgresql://...' npm run db:init");
-    process.exitCode = 1;
-    return;
+  return migrationFiles;
+}
+
+function printMissingUrlHelp(migrationFiles) {
+  console.error('缺少 SUPABASE_DB_URL（Postgres 连接串）。');
+  console.error('');
+  console.error('方式一：打开 Supabase Dashboard → SQL Editor，按顺序执行：');
+  migrationFiles.forEach((file) => console.error(`  ${file}`));
+  console.error('');
+  console.error('方式二：Project Settings → Database → Connection string (URI)');
+  console.error('  写入 .env.local：');
+  console.error("  SUPABASE_DB_URL='postgresql://postgres.[ref]:[password]@aws-0-....pooler.supabase.com:6543/postgres'");
+  console.error('  然后运行：pnpm db:init');
+}
+
+async function runWithPg(databaseUrl, migrationFiles) {
+  let Client;
+  try {
+    // eslint-disable-next-line import/no-extraneous-dependencies
+    ({ Client } = require('pg'));
+  } catch {
+    throw new Error('未安装 pg，请先运行：pnpm add -D pg');
   }
 
-  const psqlVersion = spawnSync('psql', ['--version'], {
-    stdio: 'ignore',
+  const client = new Client({
+    connectionString: databaseUrl,
+    ssl: databaseUrl.includes('localhost') ? undefined : { rejectUnauthorized: false },
   });
 
-  if (psqlVersion.error) {
-    console.error('本机未找到 psql 命令，无法从命令行执行 SQL。');
-    console.error('');
-    console.error('请改用 Supabase SQL Editor 执行：');
-    console.error(`  ${migrationFile}`);
-    process.exitCode = 1;
-    return;
+  await client.connect();
+  console.log('已连接数据库，开始执行迁移...');
+
+  try {
+    for (const migrationFile of migrationFiles) {
+      const sql = fs.readFileSync(migrationFile, 'utf8');
+      console.log(`- ${migrationFile}`);
+      await client.query(sql);
+      console.log(`  ✓ 完成`);
+    }
+  } finally {
+    await client.end();
   }
+}
 
-  console.log('正在执行 Supabase 初始化 SQL...');
-
+function runWithPsql(databaseUrl, migrationFiles) {
+  console.log('使用 psql 执行迁移...');
   for (const migrationFile of migrationFiles) {
     console.log(`- ${migrationFile}`);
     const result = spawnSync('psql', [databaseUrl, '-v', 'ON_ERROR_STOP=1', '-f', migrationFile], {
       stdio: 'inherit',
     });
-
     if (result.status !== 0) {
       process.exitCode = result.status || 1;
-      return;
+      return false;
     }
   }
+  return true;
+}
 
-  console.log('');
-  console.log('Supabase 初始化完成。建议继续运行：');
-  console.log('  npm run db:check');
+async function main() {
+  const localEnv = loadLocalEnv();
+  const databaseUrl =
+    process.env.SUPABASE_DB_URL ||
+    localEnv.SUPABASE_DB_URL ||
+    process.env.DATABASE_URL ||
+    localEnv.DATABASE_URL;
+
+  let migrationFiles;
+  try {
+    migrationFiles = listMigrationFiles();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!databaseUrl) {
+    printMissingUrlHelp(migrationFiles);
+    process.exitCode = 1;
+    return;
+  }
+
+  const psqlVersion = spawnSync('psql', ['--version'], { stdio: 'ignore' });
+  const hasPsql = !psqlVersion.error && psqlVersion.status === 0;
+
+  try {
+    if (hasPsql) {
+      if (!runWithPsql(databaseUrl, migrationFiles)) return;
+    } else {
+      console.log('本机未找到 psql，改用 node-postgres (pg) 执行...');
+      await runWithPg(databaseUrl, migrationFiles);
+    }
+
+    console.log('');
+    console.log('Supabase 迁移完成。建议继续运行：');
+    console.log('  pnpm db:check');
+  } catch (error) {
+    console.error('迁移失败：', error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
 }
 
 main();

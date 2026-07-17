@@ -31,11 +31,13 @@ function createSupabaseClient() {
   const localEnv = loadLocalEnv();
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || localEnv.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    localEnv.SUPABASE_SERVICE_ROLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     localEnv.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
-    throw new Error('缺少 NEXT_PUBLIC_SUPABASE_URL 或 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY。');
+    throw new Error('缺少 NEXT_PUBLIC_SUPABASE_URL 或 API Key。');
   }
 
   return createClient(supabaseUrl, supabaseKey);
@@ -44,7 +46,9 @@ function createSupabaseClient() {
 const tableChecks = [
   {
     name: 'readings',
-    columns: 'id,user_id,device_id,question,mood,spread_type,cards,reading,created_at,updated_at,is_dream',
+    // Phase B: revision / deleted_at / client_id
+    columns:
+      'id,user_id,device_id,question,mood,spread_type,cards,reading,created_at,updated_at,is_dream,revision,deleted_at,client_id',
   },
   {
     name: 'checkins',
@@ -62,6 +66,25 @@ const tableChecks = [
     name: 'insight_snapshots',
     columns: 'user_id,period_days,metrics,summary,created_at,updated_at',
   },
+  // Phase C
+  {
+    name: 'reading_generations',
+    columns:
+      'id,reading_id,user_id,generation_no,model,prompt_version,input_hash,output_jsonb,status,safety_labels,duration_ms,request_id,created_at',
+  },
+  {
+    name: 'reading_messages',
+    columns: 'id,reading_id,user_id,role,content,created_at',
+  },
+  {
+    name: 'user_memory',
+    columns:
+      'id,user_id,category,content,source_reading_id,confidence,consent_scope,expires_at,user_editable,created_at,updated_at,deleted_at',
+  },
+  {
+    name: 'action_items',
+    columns: 'id,user_id,reading_id,seed_text,status,due_date,created_at,updated_at',
+  },
 ];
 
 async function checkTables(supabase) {
@@ -71,14 +94,13 @@ async function checkTables(supabase) {
   console.log('正在检查 Supabase 表结构...');
 
   for (const table of tableChecks) {
-    const { error } = await supabase
-      .from(table.name)
-      .select(table.columns)
-      .limit(1);
+    const { error } = await supabase.from(table.name).select(table.columns).limit(1);
 
     if (error) {
       hasError = true;
-      if (error.code === 'PGRST205') missingTableCount += 1;
+      if (error.code === 'PGRST205' || /schema cache|does not exist|Could not find/i.test(error.message)) {
+        missingTableCount += 1;
+      }
       console.error(`- ${table.name}: 失败 ${error.code || ''} ${error.message}`);
     } else {
       console.log(`- ${table.name}: 正常`);
@@ -87,12 +109,9 @@ async function checkTables(supabase) {
 
   if (missingTableCount > 0) {
     console.error('');
-    console.error('检测到 Supabase 远端表尚未初始化。');
-    console.error('请先在 Supabase SQL Editor 执行：');
-    console.error('  supabase/migrations/202606170001_init_journal_sync.sql');
-    console.error('');
-    console.error('也可以配置 SUPABASE_DB_URL 后运行：');
-    console.error('  npm run db:init');
+    console.error('检测到表/字段缺失。请执行：');
+    console.error('  pnpm db:init   # 需配置 SUPABASE_DB_URL');
+    console.error('或在 SQL Editor 中按序运行 supabase/migrations/*.sql');
   }
 
   return !hasError;
@@ -108,11 +127,13 @@ async function main() {
     return;
   }
 
+  console.log('');
+  console.log('结构检查通过（含 Phase B revision 与 Phase C 新表）。');
+
   if (shouldWrite) {
     console.error('');
     console.error('账号级 RLS 已开启，匿名 publishable key 不能执行写入健康检查。');
     console.error('请登录应用进行真实写入验证，或在 Supabase 控制台检查 RLS 策略。');
-    console.error('结构检查已覆盖 readings、checkins、monthly_reports、profiles、insight_snapshots。');
   }
 }
 
