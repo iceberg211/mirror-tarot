@@ -1,4 +1,5 @@
 import { PromptTemplate } from '@langchain/core/prompts';
+import { compactText } from '../context';
 
 // ==========================================
 // Monthly Report Prompts (月度报告)
@@ -65,16 +66,20 @@ export async function buildMonthlyReportPrompt({
   readings,
   topCards,
 }: ReportPromptInput): Promise<string> {
-  const checkinText = checkins.length > 0
-    ? checkins.map((c) => `* ${c.date}: ${c.mood}`).join('\n')
+  const recentCheckins = checkins.slice(-31);
+  const recentReadings = readings.slice(-20);
+  const frequentCards = topCards.slice(0, 5);
+
+  const checkinText = recentCheckins.length > 0
+    ? recentCheckins.map((c) => `* ${c.date}: ${compactText(c.mood, 30)}`).join('\n')
     : '无打卡历史';
 
-  const readingsText = readings.length > 0
-    ? readings.map((r) => `* 问题: "${r.question}" | 情绪: ${r.mood} | 卡牌: ${r.cards.map((c) => `${c.zhName}(${c.orientation === 'reversed' ? '逆位' : '正位'})`).join(', ')}`).join('\n')
+  const readingsText = recentReadings.length > 0
+    ? recentReadings.map((r) => `* 问题: "${compactText(r.question, 180, { preserveEnd: true })}" | 情绪: ${compactText(r.mood, 30)} | 卡牌: ${r.cards.slice(0, 5).map((c) => `${c.zhName}(${c.orientation === 'reversed' ? '逆位' : '正位'})`).join(', ')}`).join('\n')
     : '无塔罗占卜记录';
 
-  const topCardsText = topCards.length > 0
-    ? topCards.map((tc, i) => `${i + 1}. ${tc.zhName} (出现 ${tc.count} 次)`).join('\n')
+  const topCardsText = frequentCards.length > 0
+    ? frequentCards.map((tc, i) => `${i + 1}. ${tc.zhName} (出现 ${tc.count} 次)`).join('\n')
     : '暂无高频卡牌';
 
   return monthlyReportPromptTemplate.format({

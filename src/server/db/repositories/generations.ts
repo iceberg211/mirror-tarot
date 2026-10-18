@@ -15,7 +15,13 @@ export interface GenerationRecordInput {
   ttftMs?: number | null;
   durationMs?: number | null;
   inputTokens?: number | null;
+  cachedInputTokens?: number | null;
   outputTokens?: number | null;
+  provider?: string | null;
+  inputCostCny?: number | null;
+  outputCostCny?: number | null;
+  totalCostCny?: number | null;
+  pricingVersion?: string | null;
   errorCode?: string | null;
   requestId?: string | null;
 }
@@ -41,7 +47,13 @@ export async function insertGeneration(input: GenerationRecordInput): Promise<bo
       ttft_ms: input.ttftMs ?? null,
       duration_ms: input.durationMs ?? null,
       input_tokens: input.inputTokens ?? null,
+      cached_input_tokens: input.cachedInputTokens ?? null,
       output_tokens: input.outputTokens ?? null,
+      provider: input.provider ?? null,
+      input_cost_cny: input.inputCostCny ?? null,
+      output_cost_cny: input.outputCostCny ?? null,
+      total_cost_cny: input.totalCostCny ?? null,
+      pricing_version: input.pricingVersion ?? null,
       error_code: input.errorCode ?? null,
       request_id: input.requestId ?? null,
     });

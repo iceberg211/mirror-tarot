@@ -1,4 +1,5 @@
 import { getCardById } from '@/lib/tarot/cards';
+import { compactText } from '@/lib/ai/context';
 import { getCardMeaning } from '@/lib/tarot/meanings';
 import { getSpreadByType } from '@/lib/tarot/spreads';
 import type { CardMeaning, SelectedCard, SpreadType } from '@/lib/tarot/types';
@@ -77,7 +78,11 @@ export function formatPreviousReadingForPrompt(previous: {
   gentleReminder?: string;
 }): string {
   const cardBlocks = (previous.cardReadings || [])
-    .map((item, idx) => `# CARD_READING_${idx + 1}\n${item.interpretation}`)
+    .slice(0, 10)
+    .map(
+      (item, idx) =>
+        `# CARD_READING_${idx + 1}\n${compactText(item.interpretation, 500, { preserveEnd: true })}`
+    )
     .join('\n\n');
 
   return [

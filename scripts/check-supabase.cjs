@@ -70,7 +70,7 @@ const tableChecks = [
   {
     name: 'reading_generations',
     columns:
-      'id,reading_id,user_id,generation_no,model,prompt_version,input_hash,output_jsonb,status,safety_labels,duration_ms,request_id,created_at',
+      'id,reading_id,user_id,generation_no,model,provider,prompt_version,input_hash,output_jsonb,status,safety_labels,duration_ms,input_tokens,cached_input_tokens,output_tokens,input_cost_cny,output_cost_cny,total_cost_cny,pricing_version,request_id,created_at',
   },
   {
     name: 'reading_messages',

@@ -21,8 +21,9 @@ export interface UserMemoryItem {
   updatedAt: string;
 }
 
-const MAX_MEMORY_ITEMS = 12;
+const MAX_MEMORY_ITEMS = 8;
 const MAX_CONTENT_LEN = 200;
+const MAX_MEMORY_PROMPT_LEN = 1_800;
 
 export async function listActiveMemory(userId: string): Promise<UserMemoryItem[]> {
   const admin = getSupabaseAdmin();
@@ -69,10 +70,16 @@ export async function listActiveMemory(userId: string): Promise<UserMemoryItem[]
 export function buildMemoryContextPrompt(items: UserMemoryItem[]): string {
   if (!items.length) return '';
 
-  const lines = items.map((item) => {
+  const lines: string[] = [];
+  let usedLength = 0;
+
+  for (const item of items.slice(0, MAX_MEMORY_ITEMS)) {
     const conf = Math.round((item.confidence || 0) * 100);
-    return `- [${item.category}|${conf}%] ${item.content.slice(0, MAX_CONTENT_LEN)}`;
-  });
+    const line = `- [${item.category}|${conf}%] ${item.content.slice(0, MAX_CONTENT_LEN)}`;
+    if (usedLength + line.length > MAX_MEMORY_PROMPT_LEN) break;
+    lines.push(line);
+    usedLength += line.length;
+  }
 
   return `【用户允许的长期记忆摘要（结构化，非完整日记）】\n${lines.join('\n')}\n（说明：仅作语气与主题参考；不要当作不可更改的事实，不要复述隐私细节）`;
 }

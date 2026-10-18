@@ -1,8 +1,13 @@
 import {
   createAIChatStream,
   createAITwoPhaseReadingStream,
+  type AIUsageReport,
 } from '@/lib/ai/client';
-import { isTwoPhaseEnabled } from '@/lib/ai/config';
+import {
+  AI_OUTPUT_TOKEN_LIMITS,
+  getReadingDetailOutputLimit,
+  isTwoPhaseEnabled,
+} from '@/lib/ai/config';
 import {
   AI_PROMPT_VERSIONS,
   buildReadingDetailSystemPrompt,
@@ -21,7 +26,10 @@ import {
 import { handleRouteError, jsonError } from '@/server/ai/errors';
 import { readingRequestSchema } from '@/server/ai/schemas/requests';
 import { resolveUserIdFromRequest } from '@/server/ai/auth';
-import { recordAiGeneration } from '@/server/ai/telemetry/log';
+import {
+  recordAiGeneration,
+  toAiUsageTelemetry,
+} from '@/server/ai/telemetry/log';
 import {
   instrumentStreamResponse,
   runReadingWorkflow,
@@ -126,6 +134,7 @@ export async function POST(req: Request) {
     let response: Response;
     let modelLabel = '';
     let promptVersion: string = AI_PROMPT_VERSIONS.reading;
+    let usageReport: AIUsageReport | undefined;
 
     if (isTwoPhaseEnabled() && body.question !== '每日镜面低语') {
       const summarySystem = await buildReadingSummarySystemPrompt(body.style);
@@ -135,6 +144,16 @@ export async function POST(req: Request) {
       );
       promptVersion = `${AI_PROMPT_VERSIONS.readingSummary}+${AI_PROMPT_VERSIONS.readingDetail}`;
       modelLabel = 'fast+deep';
+      const detailUserPrompt = await buildReadingUserPrompt(
+        body.question,
+        body.mood,
+        ctx.spreadName,
+        ctx.cardsWithMeanings,
+        ctx.isLateNight,
+        '',
+        body.recentMoodState,
+        body.spreadType
+      );
 
       response = await createAITwoPhaseReadingStream({
         phase1Messages: [
@@ -149,7 +168,7 @@ export async function POST(req: Request) {
           {
             role: 'user',
             content:
-              userPrompt +
+              detailUserPrompt +
               '\n\n请只输出 CARD_READING_*、CONTRADICTION、OVERLOOKED_FACTOR。不要重复 SUMMARY/ACTION/REMINDER。',
           },
         ],
@@ -157,7 +176,15 @@ export async function POST(req: Request) {
           temperature: 0.75,
           requestName: 'reading',
           promptVersion,
+          onUsage: (report) => {
+            usageReport = report;
+          },
         },
+        phase1MaxTokens: AI_OUTPUT_TOKEN_LIMITS.readingSummary,
+        phase2MaxTokens: getReadingDetailOutputLimit(
+          ctx.cardsWithMeanings.length
+        ),
+        fallbackMaxTokens: AI_OUTPUT_TOKEN_LIMITS.readingFull,
       });
     } else {
       const systemPrompt = await buildReadingSystemPrompt(
@@ -175,6 +202,13 @@ export async function POST(req: Request) {
           requestName: 'reading',
           promptVersion,
           modelTier: 'deep',
+          maxTokens:
+            body.question === '每日镜面低语'
+              ? AI_OUTPUT_TOKEN_LIMITS.dailyWhisper
+              : AI_OUTPUT_TOKEN_LIMITS.readingFull,
+          onUsage: (report) => {
+            usageReport = report;
+          },
         }
       );
     }
@@ -206,6 +240,7 @@ export async function POST(req: Request) {
           model: headers.get('X-Mirror-AI-Model') || modelLabel,
           promptVersion,
           outputSummary: { stream: true, theme: ctx.theme },
+          ...toAiUsageTelemetry(usageReport),
         });
       },
       workflow.startedAt

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createAIJsonCompletion } from '@/lib/ai/client';
+import { AI_OUTPUT_TOKEN_LIMITS } from '@/lib/ai/config';
 import { AI_PROMPT_VERSIONS, buildDreamSystemPrompt, buildDreamUserPrompt } from '@/lib/ai/prompts';
 import { LangChainResponseFormatError } from '@/lib/ai/langchainAgent';
 import {
@@ -15,7 +16,11 @@ import { dreamRequestSchema } from '@/server/ai/schemas/requests';
 import { classifySafety, logSafetyAudit } from '@/server/ai/safety/classify';
 import { DEFAULT_SUPPORT_RESOURCES } from '@/server/ai/safety/resources';
 import { resolveUserIdFromRequest } from '@/server/ai/auth';
-import { hashInput, recordAiGeneration } from '@/server/ai/telemetry/log';
+import {
+  hashInput,
+  recordAiGeneration,
+  toAiUsageTelemetry,
+} from '@/server/ai/telemetry/log';
 
 interface DreamAnalysisResult {
   dreamAnalysis: string;
@@ -122,6 +127,7 @@ export async function POST(req: Request) {
         requestName: 'dream',
         promptVersion: AI_PROMPT_VERSIONS.dream,
         modelTier: 'fast',
+        maxTokens: AI_OUTPUT_TOKEN_LIMITS.dream,
         validate: isDreamAnalysisResult,
       }
     );
@@ -139,6 +145,7 @@ export async function POST(req: Request) {
         inputHash,
         model: result.meta.modelName,
         readingId: `dream:${inputHash.slice(0, 16)}`,
+        ...toAiUsageTelemetry(result.meta.usage),
       });
       return withRateLimitHeaders(
         jsonError('AI_FORMAT_ERROR', 'AI 返回的数据结构不正确，请重新尝试', 500, {
@@ -161,6 +168,7 @@ export async function POST(req: Request) {
       promptVersion: AI_PROMPT_VERSIONS.dream,
       readingId: `dream:${inputHash.slice(0, 16)}`,
       outputSummary: { hasColors: true },
+      ...toAiUsageTelemetry(result.meta.usage),
     });
     const response = NextResponse.json({
       success: true,

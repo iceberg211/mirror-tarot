@@ -1,5 +1,6 @@
 import { PromptTemplate } from '@langchain/core/prompts';
 import { SelectedCard } from '../../tarot/types';
+import { compactText } from '../context';
 import {
   classifyQuestionTheme,
   formatCardReadingsTemplate,
@@ -166,7 +167,10 @@ export async function buildReadingUserPrompt(
     }
   }
 
-  const formattedHistoryContext = historyContext ? `${historyContext}\n\n` : '';
+  const compressedHistoryContext = compactText(historyContext, 1_800);
+  const formattedHistoryContext = compressedHistoryContext
+    ? `${compressedHistoryContext}\n\n`
+    : '';
   const lateNightPromptCombined = lateNightPrompt + moodAlertPrompt;
 
   return standardReadingUserPromptTemplate.format({
@@ -247,7 +251,10 @@ export async function buildFollowUpUserPrompt(
 ): Promise<string> {
   const cardsSummary = formatCardsSummary(cards);
   const historyStr = formatChatHistory(chatHistory);
-  const formattedHistoryContext = historyContext ? `${historyContext}\n\n` : '';
+  const compressedHistoryContext = compactText(historyContext, 1_800);
+  const formattedHistoryContext = compressedHistoryContext
+    ? `${compressedHistoryContext}\n\n`
+    : '';
 
   return followUpUserPromptTemplate.format({
     question,
@@ -255,7 +262,7 @@ export async function buildFollowUpUserPrompt(
     spreadName,
     cardsSummary,
     historyContext: formattedHistoryContext,
-    previousReading,
+    previousReading: compactText(previousReading, 3_600, { preserveEnd: true }),
     historyStr,
     newQuestion,
   });

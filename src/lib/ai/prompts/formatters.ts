@@ -1,4 +1,5 @@
 import { SelectedCard } from '../../tarot/types';
+import { compactChatHistory } from '../context';
 
 export type QuestionTheme = 'career' | 'love' | 'emotion' | 'choice' | 'general';
 
@@ -137,7 +138,7 @@ export function formatCardsSummary(cards: SelectedCard[]): string {
 export function formatChatHistory(
   chatHistory: { role: 'user' | 'assistant'; content: string }[]
 ): string {
-  const historyStr = chatHistory
+  const historyStr = compactChatHistory(chatHistory)
     .map((msg) => `${msg.role === 'user' ? '用户' : 'AI助手'}: ${msg.content}`)
     .join('\n');
   return historyStr || '（无历史对话）';

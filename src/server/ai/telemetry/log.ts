@@ -1,10 +1,12 @@
 import { createHash } from 'node:crypto';
+import type { AIUsageReport } from '@/lib/ai/config';
 import { insertGeneration, type GenerationStatus } from '@/server/db/repositories/generations';
 
 export interface AiTelemetryEvent {
   requestId: string;
   route: string;
   model?: string;
+  provider?: string;
   promptVersion?: string;
   durationMs?: number;
   ttftMs?: number | null;
@@ -15,6 +17,13 @@ export interface AiTelemetryEvent {
   userId?: string | null;
   readingId?: string | null;
   generationNo?: number;
+  inputTokens?: number | null;
+  cachedInputTokens?: number | null;
+  outputTokens?: number | null;
+  inputCostCny?: number | null;
+  outputCostCny?: number | null;
+  totalCostCny?: number | null;
+  pricingVersion?: string | null;
   /** 截断后的结构化摘要，禁止塞完整问题/日记 */
   outputSummary?: Record<string, unknown>;
 }
@@ -28,6 +37,21 @@ export function hashInput(parts: string[]): string {
   return createHash('sha256').update(parts.join('|')).digest('hex');
 }
 
+export function toAiUsageTelemetry(report: AIUsageReport | undefined) {
+  if (!report) return {};
+
+  return {
+    provider: report.provider,
+    inputTokens: report.inputTokens,
+    cachedInputTokens: report.cachedInputTokens,
+    outputTokens: report.outputTokens,
+    inputCostCny: report.inputCostCny,
+    outputCostCny: report.outputCostCny,
+    totalCostCny: report.totalCostCny,
+    pricingVersion: report.pricingVersion,
+  };
+}
+
 /**
  * 脱敏 AI 事件日志。默认不记录完整 question / diary。
  */
@@ -37,6 +61,7 @@ export function logAiEvent(event: AiTelemetryEvent): void {
     requestId: event.requestId,
     route: event.route,
     model: event.model,
+    provider: event.provider,
     promptVersion: event.promptVersion,
     durationMs: event.durationMs,
     ttftMs: event.ttftMs ?? undefined,
@@ -47,6 +72,13 @@ export function logAiEvent(event: AiTelemetryEvent): void {
     userIdHash: hashUserId(event.userId),
     readingId: event.readingId ?? undefined,
     generationNo: event.generationNo,
+    inputTokens: event.inputTokens ?? undefined,
+    cachedInputTokens: event.cachedInputTokens ?? undefined,
+    outputTokens: event.outputTokens ?? undefined,
+    inputCostCny: event.inputCostCny ?? undefined,
+    outputCostCny: event.outputCostCny ?? undefined,
+    totalCostCny: event.totalCostCny ?? undefined,
+    pricingVersion: event.pricingVersion ?? undefined,
   };
 
   console.info(JSON.stringify(payload));
@@ -68,6 +100,7 @@ export async function recordAiGeneration(event: AiTelemetryEvent): Promise<void>
     userId: event.userId,
     generationNo: event.generationNo ?? 1,
     model: event.model,
+    provider: event.provider,
     promptVersion: event.promptVersion,
     inputHash: event.inputHash,
     output: event.outputSummary ?? {},
@@ -75,6 +108,13 @@ export async function recordAiGeneration(event: AiTelemetryEvent): Promise<void>
     safetyLabels: event.safetyLevel ? [event.safetyLevel] : [],
     ttftMs: event.ttftMs,
     durationMs: event.durationMs,
+    inputTokens: event.inputTokens,
+    cachedInputTokens: event.cachedInputTokens,
+    outputTokens: event.outputTokens,
+    inputCostCny: event.inputCostCny,
+    outputCostCny: event.outputCostCny,
+    totalCostCny: event.totalCostCny,
+    pricingVersion: event.pricingVersion,
     errorCode: event.errorCode,
     requestId: event.requestId,
   });

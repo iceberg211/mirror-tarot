@@ -1,4 +1,8 @@
-import { createAIChatStream } from '@/lib/ai/client';
+import {
+  createAIChatStream,
+  type AIUsageReport,
+} from '@/lib/ai/client';
+import { AI_OUTPUT_TOKEN_LIMITS } from '@/lib/ai/config';
 import { AI_PROMPT_VERSIONS, buildFollowUpSystemPrompt, buildFollowUpUserPrompt } from '@/lib/ai/prompts';
 import { getSpreadByType } from '@/lib/tarot/spreads';
 import {
@@ -18,7 +22,11 @@ import {
 import { classifySafety, logSafetyAudit } from '@/server/ai/safety/classify';
 import { buildSupportiveFollowUpText } from '@/server/ai/safety/resources';
 import { resolveUserIdFromRequest } from '@/server/ai/auth';
-import { hashInput, recordAiGeneration } from '@/server/ai/telemetry/log';
+import {
+  hashInput,
+  recordAiGeneration,
+  toAiUsageTelemetry,
+} from '@/server/ai/telemetry/log';
 import { instrumentStreamResponse } from '@/server/ai/workflows/reading-graph';
 import {
   buildMemoryContextPrompt,
@@ -113,6 +121,7 @@ export async function POST(req: Request) {
       body.newQuestion,
       memoryPrompt
     );
+    let usageReport: AIUsageReport | undefined;
 
     const response = await createAIChatStream(
       [
@@ -124,6 +133,10 @@ export async function POST(req: Request) {
         requestName: 'follow-up',
         promptVersion: AI_PROMPT_VERSIONS.followUp,
         modelTier: 'fast',
+        maxTokens: AI_OUTPUT_TOKEN_LIMITS.followUp,
+        onUsage: (report) => {
+          usageReport = report;
+        },
       }
     );
 
@@ -163,6 +176,7 @@ export async function POST(req: Request) {
           promptVersion: AI_PROMPT_VERSIONS.followUp,
           readingId: `follow-up:${inputHash.slice(0, 16)}`,
           outputSummary: { stream: true },
+          ...toAiUsageTelemetry(usageReport),
         });
       },
       startedAt

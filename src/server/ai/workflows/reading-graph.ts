@@ -109,8 +109,15 @@ export function instrumentStreamResponse(
   onComplete: (meta: { durationMs: number }) => void,
   startedAt: number
 ): Response {
-  if (!response.body) {
+  let completed = false;
+  const completeOnce = () => {
+    if (completed) return;
+    completed = true;
     onComplete({ durationMs: Date.now() - startedAt });
+  };
+
+  if (!response.body) {
+    completeOnce();
     return response;
   }
 
@@ -120,18 +127,18 @@ export function instrumentStreamResponse(
       try {
         const { done, value } = await reader.read();
         if (done) {
-          onComplete({ durationMs: Date.now() - startedAt });
+          completeOnce();
           controller.close();
           return;
         }
         controller.enqueue(value);
       } catch (error) {
-        onComplete({ durationMs: Date.now() - startedAt });
+        completeOnce();
         controller.error(error);
       }
     },
     cancel(reason) {
-      onComplete({ durationMs: Date.now() - startedAt });
+      completeOnce();
       return reader.cancel(reason);
     },
   });
