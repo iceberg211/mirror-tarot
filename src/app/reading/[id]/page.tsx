@@ -158,6 +158,7 @@ function ReadingDetailContent() {
           cards={entry.cards}
           generating={generating}
           activeFocusIndex={activeFocusIndex}
+          readingId={entry.id}
         />
 
         {/* AI 解读状态警告与重试 */}
@@ -165,6 +166,7 @@ function ReadingDetailContent() {
           generating={generating}
           readingError={readingError}
           isReadingEmpty={isReadingEmpty}
+          parsedReading={parsedReading}
           onRegenerate={() => handleRegenerate()}
         />
 

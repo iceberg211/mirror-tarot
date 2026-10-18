@@ -6,6 +6,7 @@ import BottomNav from '@/components/layout/BottomNav';
 import { useJournalData } from '@/hooks/useJournalData';
 import WeeklyCalendar from '@/components/journal/WeeklyCalendar';
 import JournalListTab from '@/components/journal/JournalListTab';
+import HomeActionItemCard from '@/components/home/HomeActionItemCard';
 
 export default function JournalPage() {
   const {
@@ -49,6 +50,8 @@ export default function JournalPage() {
               setShowCheckInPicker={setShowCheckInPicker}
               onCheckIn={handleCheckIn}
             />
+
+            <HomeActionItemCard />
 
             <JournalListTab
               entries={entries}

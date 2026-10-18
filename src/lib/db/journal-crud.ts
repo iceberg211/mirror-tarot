@@ -87,6 +87,15 @@ export function getLocalReadings(): JournalEntry[] {
   return filterActiveReadings(getAllLocalReadings());
 }
 
+/**
+ * 统计尚未同步到云端的记录数。
+ * 退出登录会清空本机缓存，因此删除前必须先确认这批数据不会丢。
+ */
+export function countPendingLocalReadings(): number {
+  return getAllLocalReadings().filter((entry) => !entry.deletedAt && entry.syncStatus === 'pending')
+    .length;
+}
+
 export function getLocalReadingById(id: string): JournalEntry | undefined {
   return getAllLocalReadings().find((r) => r.id === id && !r.deletedAt);
 }
@@ -417,12 +426,108 @@ export function updateActionSeedStatus(
         },
       });
       saveAndSyncEntry(readings[index], readings);
+      window.dispatchEvent(new CustomEvent('mirror_action_seed_updated', { detail: { id, status } }));
       return true;
     }
     return false;
   } catch (e) {
     console.error('Failed to update action seed status:', e);
     return false;
+  }
+}
+
+export interface ActiveActionSeedItem {
+  readingId: string;
+  question: string;
+  actionSeed: ActionSeed;
+}
+
+export function getLatestActionSeed(): ActiveActionSeedItem | null {
+  if (typeof window === 'undefined') return null;
+  const readings = getLocalReadings();
+  const todayStr = getLocalDateString();
+
+  // 1. 优先找未完成（pending）的最新微行动
+  for (const r of readings) {
+    if (r.actionSeed && r.actionSeed.status === 'pending') {
+      return {
+        readingId: r.id,
+        question: r.question,
+        actionSeed: r.actionSeed,
+      };
+    }
+  }
+
+  // 2. 其次找今天已完成的微行动
+  for (const r of readings) {
+    if (r.actionSeed && r.actionSeed.status === 'completed' && r.actionSeed.date === todayStr) {
+      return {
+        readingId: r.id,
+        question: r.question,
+        actionSeed: r.actionSeed,
+      };
+    }
+  }
+
+  return null;
+}
+
+export function toggleActionSeedStatus(id: string): ActionSeed | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const readings = getAllLocalReadings();
+    const index = readings.findIndex((r) => r.id === id && !r.deletedAt);
+    if (index === -1) return null;
+
+    const entry = readings[index];
+    if (!entry.actionSeed) return null;
+
+    const nextStatus = entry.actionSeed.status === 'completed' ? 'pending' : 'completed';
+    const updatedSeed: ActionSeed = {
+      ...entry.actionSeed,
+      status: nextStatus,
+    };
+
+    readings[index] = withRevisionBump(entry, {
+      actionSeed: updatedSeed,
+    });
+    saveAndSyncEntry(readings[index], readings);
+
+    window.dispatchEvent(new CustomEvent('mirror_action_seed_updated', { detail: { id, status: nextStatus } }));
+    return updatedSeed;
+  } catch (e) {
+    console.error('Failed to toggle action seed status:', e);
+    return null;
+  }
+}
+
+export function setReadingActionSeed(id: string, customSeedText?: string): ActionSeed | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const readings = getAllLocalReadings();
+    const index = readings.findIndex((r) => r.id === id && !r.deletedAt);
+    if (index === -1) return null;
+
+    const entry = readings[index];
+    const text = customSeedText || extractActionSeed(entry.reading?.actionAdvice || '');
+    if (!text) return null;
+
+    const newSeed: ActionSeed = {
+      seedText: text,
+      status: 'pending',
+      date: getLocalDateString(),
+    };
+
+    readings[index] = withRevisionBump(entry, {
+      actionSeed: newSeed,
+    });
+    saveAndSyncEntry(readings[index], readings);
+
+    window.dispatchEvent(new CustomEvent('mirror_action_seed_updated', { detail: { id, status: 'pending' } }));
+    return newSeed;
+  } catch (e) {
+    console.error('Failed to set reading action seed:', e);
+    return null;
   }
 }
 

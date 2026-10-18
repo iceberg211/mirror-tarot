@@ -12,6 +12,16 @@ export interface ActionSeed {
   date: string;
 }
 
+export interface ActionItemRecord {
+  id: string;
+  readingId: string;
+  seedText: string;
+  question?: string;
+  status: 'pending' | 'completed' | 'dismissed';
+  createdAt: string;
+  completedAt?: string;
+}
+
 export type SyncStatus = 'synced' | 'pending' | 'conflict';
 
 export interface JournalEntry {

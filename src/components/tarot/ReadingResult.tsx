@@ -1,16 +1,16 @@
-'use client';
-
 import React, { memo, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Info, Flame, AlertCircle, Eye } from 'lucide-react';
+import { Info, Flame, AlertCircle, Eye, Check } from 'lucide-react';
 import { SelectedCard, ParsedReading } from '@/lib/tarot/types';
 import CardMeaningModal from '@/components/tarot/CardMeaningModal';
+import { useActionItem } from '@/hooks/useActionItem';
 
 interface ReadingResultProps {
   parsedReading: ParsedReading;
   cards: SelectedCard[];
   generating: boolean;
   activeFocusIndex?: number;
+  readingId?: string;
 }
 
 // 审计：今天可做优先 — 行动建议放在首个页签
@@ -139,10 +139,16 @@ export default function ReadingResult({
   cards,
   generating,
   activeFocusIndex = -1,
+  readingId,
 }: ReadingResultProps) {
   const [activeTab, setActiveTab] = useState<ResultTabId>('advice');
   const [userCardsExpanded, setUserCardsExpanded] = useState(false);
   const [detailMode, setDetailMode] = useState<ReadingDetailMode>('beginner');
+  const { activeItem, acceptAction } = useActionItem();
+
+  const isActionAccepted = Boolean(
+    readingId && activeItem?.readingId === readingId
+  );
 
   // 百科 Modal 状态
   const [modalCard, setModalCard] = useState<SelectedCard | null>(null);
@@ -248,7 +254,7 @@ export default function ReadingResult({
             </div>
 
             {/* 页签内容 */}
-            <div className="min-h-[110px] p-4.5 rounded-xl border border-gold/15 bg-[#11131A]/65 flex flex-col justify-center shadow-gold-glow">
+            <div className="min-h-[110px] p-4.5 rounded-xl border border-gold/15 bg-[#11131A]/65 flex flex-col justify-center shadow-gold-glow relative">
               <AnimatePresence mode="wait">
                 <motion.p
                   key={visibleActiveTab}
@@ -267,6 +273,38 @@ export default function ReadingResult({
                   )}
                 </motion.p>
               </AnimatePresence>
+
+              {/* 当处于「今天一步」且已生成完成时，提供接单按钮 */}
+              {!generating && visibleActiveTab === 'advice' && parsedReading.actionAdvice && (
+                <div className="mt-3.5 pt-3 border-t border-gold/10 flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-[10px] font-serif text-gold-muted/70">
+                    {isActionAccepted ? '✓ 已接下该行动，可在首页打卡' : '将此建议设为今日微行动：'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (readingId) {
+                        acceptAction(readingId, parsedReading.actionAdvice);
+                      }
+                    }}
+                    disabled={isActionAccepted}
+                    className={`px-3 py-1 rounded-full text-[10px] font-serif tracking-widest transition-all duration-300 cursor-pointer flex items-center gap-1 ${
+                      isActionAccepted
+                        ? 'border border-emerald-500/30 bg-emerald-950/20 text-emerald-300 cursor-default'
+                        : 'border border-gold/35 bg-gold/10 text-gold hover:bg-gold/20 hover:border-gold shadow-gold-glow'
+                    }`}
+                  >
+                    {isActionAccepted ? (
+                      <>
+                        <Check className="w-3 h-3" />
+                        <span>已设为今日行动</span>
+                      </>
+                    ) : (
+                      <span>✦ 接下今日微行动 ✦</span>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

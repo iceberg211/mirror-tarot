@@ -9,6 +9,7 @@ import { MoonPhaseInfo, getMoonSvgPath } from '@/lib/tarot/moonPhase';
 import { JournalEntry } from '@/lib/db/localJournal';
 import { useAuth } from '@/hooks/useAuth';
 import HomeActionPanel from '@/components/home/HomeActionPanel';
+import HomeActionItemCard from '@/components/home/HomeActionItemCard';
 import { useTheme } from '@/components/theme/ThemeProvider';
 
 interface HomeHeroProps {
@@ -155,6 +156,8 @@ export default function HomeHero({
           </p>
         </motion.div>
 
+        <HomeActionItemCard />
+
         <HomeActionPanel
           onStartInquiry={onStartInquiry}
           onDailyDraw={onDailyDraw}
@@ -259,6 +262,31 @@ export default function HomeHero({
             <ArrowRight className="h-4 w-4 text-gold/85" />
           </motion.button>
         )}
+
+        {/* 78张牌义图鉴探索常驻入口 */}
+        <motion.button
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.34 }}
+          type="button"
+          onClick={() => router.push('/deck')}
+          className="mt-3.5 flex items-center justify-between w-full px-4 py-3 rounded-xl border border-gold/15 bg-gradient-to-r from-gold/5 via-card to-gold/5 hover:border-gold/35 transition-all cursor-pointer group shadow-gold-glow"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full border border-gold/20 bg-gold/5 text-gold group-hover:scale-105 transition-transform">
+              <BookOpen className="h-4 w-4" />
+            </span>
+            <div className="text-left">
+              <span className="text-xs font-serif text-gold font-medium tracking-widest block">
+                78 张人生之镜 · 牌义图鉴
+              </span>
+              <span className="text-[10px] font-serif text-gold-muted/70 tracking-wide block mt-0.5">
+                探索大/小阿卡纳正逆位象征与四元素
+              </span>
+            </div>
+          </div>
+          <ArrowRight className="h-4 w-4 text-gold/70 group-hover:translate-x-0.5 transition-transform" />
+        </motion.button>
       </div>
     </section>
   );

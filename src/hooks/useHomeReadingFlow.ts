@@ -18,25 +18,55 @@ export const questionTemplates = [
 
 export type HomeSection = 'overview' | 'inquiry';
 
-export function recommendSpreadForQuestion(question: string, dreamMode = false): SpreadType {
+export function getSpreadRecommendation(question: string, dreamMode = false): {
+  type: SpreadType;
+  reason: string;
+} {
   const normalized = question.toLowerCase();
-  if (dreamMode || normalized.includes('梦')) return 'shadow';
-  if (normalized.includes('关系') || normalized.includes('感情') || normalized.includes('亲密')) {
-    return 'relationship';
+  if (dreamMode || normalized.includes('梦')) {
+    return {
+      type: 'shadow',
+      reason: '已为你匹配「自我与阴影」牌阵，探索潜意识梦境背后的隐秘动机与出口。',
+    };
   }
-  if (normalized.includes('职业') || normalized.includes('工作') || normalized.includes('项目') || normalized.includes('创业')) {
-    return 'career';
+  if (normalized.includes('关系') || normalized.includes('感情') || normalized.includes('亲密') || normalized.includes('他') || normalized.includes('她') || normalized.includes('分手') || normalized.includes('复合') || normalized.includes('喜欢')) {
+    return {
+      type: 'relationship',
+      reason: '已为你匹配「关系牌阵」，看清彼此的状态、关系现状与未来走向。',
+    };
   }
-  if (normalized.includes('选择') || normalized.includes('二选一') || normalized.includes('抉择')) {
-    return 'choice';
+  if (normalized.includes('职业') || normalized.includes('工作') || normalized.includes('项目') || normalized.includes('创业') || normalized.includes('跳槽') || normalized.includes('离职') || normalized.includes('面试')) {
+    return {
+      type: 'career',
+      reason: '已为你匹配「职业牌阵」，重点梳理现实机会、潜在风险与行动建议。',
+    };
   }
-  if (normalized.includes('阴影') || normalized.includes('潜意识') || normalized.includes('自我')) {
-    return 'shadow';
+  if (normalized.includes('选择') || normalized.includes('二选一') || normalized.includes('抉择') || normalized.includes('还是') || normalized.includes('纠结')) {
+    return {
+      type: 'choice',
+      reason: '已为你匹配「二选一抉择」牌阵，对比两条不同路径会带来的影响。',
+    };
   }
-  if (normalized.includes('瓶颈') || normalized.includes('困惑') || normalized.includes('忽略')) {
-    return 'mirror_cross';
+  if (normalized.includes('阴影') || normalized.includes('潜意识') || normalized.includes('自我') || normalized.includes('内耗') || normalized.includes('抗拒') || normalized.includes('难过')) {
+    return {
+      type: 'shadow',
+      reason: '已为你匹配「自我与阴影」牌阵，把模糊的内耗感受与深层抗拒看明白。',
+    };
   }
-  return 'three_cards';
+  if (normalized.includes('瓶颈') || normalized.includes('困惑') || normalized.includes('忽略') || normalized.includes('为什么') || normalized.includes('迷茫')) {
+    return {
+      type: 'mirror_cross',
+      reason: '已为你匹配「镜面十字」牌阵，层层拆解核心现状、理性阻碍与关键下一步。',
+    };
+  }
+  return {
+    type: 'three_cards',
+    reason: '已为你匹配经典「三牌阵」，清晰呈现当前现状、卡点阻碍与行动建议。',
+  };
+}
+
+export function recommendSpreadForQuestion(question: string, dreamMode = false): SpreadType {
+  return getSpreadRecommendation(question, dreamMode).type;
 }
 
 export function useHomeReadingFlow() {

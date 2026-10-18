@@ -4,7 +4,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { AlertCircle, ArrowLeft, Sparkles } from 'lucide-react';
-import { questionTemplates, recommendSpreadForQuestion } from '@/hooks/useHomeReadingFlow';
+import { questionTemplates, getSpreadRecommendation } from '@/hooks/useHomeReadingFlow';
 import { moodConfigs } from '@/lib/tarot/moods';
 import { spreads } from '@/lib/tarot/spreads';
 import { SpreadType } from '@/lib/tarot/types';
@@ -66,27 +66,18 @@ export default function HomeInquiryForm({
   const router = useRouter();
   const [showAllMoods, setShowAllMoods] = React.useState(false);
   const [showAllSpreads, setShowAllSpreads] = React.useState(false);
+  const [userManuallySelectedSpread, setUserManuallySelectedSpread] = React.useState(false);
   const activeMood = moodConfigs.find((mood) => mood.id === selectedMood) || moodConfigs[0];
-  const recommendedSpread = question.trim()
-    ? recommendSpreadForQuestion(question, isDream)
-    : 'three_cards';
-  const recommendedSpreadName = spreads[recommendedSpread].name;
+  
+  const recommendation = React.useMemo(() => {
+    return getSpreadRecommendation(question, isDream);
+  }, [question, isDream]);
 
   // 常用情绪优先；其余可展开
   const primaryMoods = moodConfigs.filter((m) =>
     ['calm', 'anxious', 'confused', 'tired', 'joyful', 'tangled'].includes(m.id)
   );
   const visibleMoods = showAllMoods ? moodConfigs : primaryMoods;
-
-  // 推荐 + 2 备选，其余收进「更多牌阵」
-  const primarySpreads = React.useMemo(() => {
-    const picks: SpreadType[] = [recommendedSpread];
-    for (const t of spreadOrder) {
-      if (!picks.includes(t) && picks.length < 3) picks.push(t);
-    }
-    return picks;
-  }, [recommendedSpread]);
-  const visibleSpreads = showAllSpreads ? spreadOrder : primarySpreads;
 
   return (
     <motion.section
@@ -163,7 +154,14 @@ export default function HomeInquiryForm({
         <div className="relative border-b border-gold/18 pb-3 focus-within:border-gold/45">
           <textarea
             value={question}
-            onChange={(event) => onQuestionChange(event.target.value)}
+            onChange={(event) => {
+              const val = event.target.value;
+              onQuestionChange(val);
+              if (!userManuallySelectedSpread) {
+                const rec = getSpreadRecommendation(val, isDream);
+                onSpreadChange(rec.type);
+              }
+            }}
             placeholder={isDream ? '写下梦里的画面、情绪或冲突……' : '例如：我该如何面对这段关系里的不安？'}
             className="h-28 w-full resize-none bg-transparent pr-8 text-base font-serif leading-8 tracking-wide text-foreground/92 outline-none placeholder:text-gold-muted/35 no-scrollbar"
             maxLength={400}
@@ -182,6 +180,114 @@ export default function HomeInquiryForm({
           </motion.div>
         )}
 
+        {/* 智能自适应牌阵推荐区 */}
+        <section className="flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono uppercase tracking-[0.24em] text-gold-muted/60">
+              Spread ✦ 牌阵
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowAllSpreads((prev) => !prev)}
+              className="text-xs font-serif text-gold underline-offset-2 hover:underline cursor-pointer flex items-center gap-1"
+            >
+              <span>{showAllSpreads ? '收起切换 ▴' : '切换其他牌阵 ▾'}</span>
+            </button>
+          </div>
+
+          {/* 推荐卡片 */}
+          <div className="rounded-2xl border border-gold/30 bg-gradient-to-br from-[#1C1913]/90 via-[#12141C]/80 to-[#0A0C12]/90 p-4 shadow-gold-glow relative overflow-hidden">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gold/15 text-gold text-xs shadow-gold-glow">
+                  ✦
+                </span>
+                <span className="text-sm font-serif font-bold tracking-widest text-gold">
+                  {spreads[selectedSpread]?.name || '三牌阵'}
+                </span>
+              </div>
+              {selectedSpread === recommendation.type ? (
+                <span className="text-[9px] font-mono tracking-wider px-2 py-0.5 rounded-full border border-gold/35 bg-gold/10 text-gold">
+                  智能匹配
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserManuallySelectedSpread(false);
+                    onSpreadChange(recommendation.type);
+                  }}
+                  className="text-[10px] font-serif text-gold-muted hover:text-gold underline"
+                >
+                  还原推荐 ({spreads[recommendation.type].name})
+                </button>
+              )}
+            </div>
+
+            <p className="mt-2 text-xs font-serif leading-relaxed text-foreground/80 tracking-wide">
+              {selectedSpread === recommendation.type
+                ? recommendation.reason
+                : spreads[selectedSpread]?.description}
+            </p>
+
+            {spreads[selectedSpread]?.positions.length > 0 && (
+              <div className="mt-2.5 pt-2.5 border-t border-gold/10 flex flex-wrap items-center gap-1.5 text-[10px] font-serif text-gold-muted/75">
+                <span className="text-gold/60">解读视角：</span>
+                {spreads[selectedSpread].positions.map((pos, idx) => (
+                  <span key={idx} className="bg-card/60 px-2 py-0.5 rounded border border-gold/10">
+                    {pos}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 折叠牌阵列表 */}
+          {showAllSpreads && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="flex flex-col divide-y divide-gold/10 border-y border-gold/10 mt-1"
+            >
+              {spreadOrder.map((type) => {
+                const spread = spreads[type];
+                const isSelected = selectedSpread === type;
+                const positionText = spread.positions.length > 0 ? spread.positions.join(' / ') : '自由定义';
+
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setUserManuallySelectedSpread(true);
+                      onSpreadChange(type);
+                      setShowAllSpreads(false);
+                    }}
+                    className="grid min-h-[58px] grid-cols-[1fr_auto] items-center gap-4 py-2.5 text-left hover:bg-gold/5 px-2 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <span>
+                      <span className={`block text-xs font-serif font-semibold tracking-widest ${isSelected ? 'text-gold' : 'text-foreground/85'}`}>
+                        {spread.name}
+                        {type === recommendation.type && (
+                          <span className="ml-2 text-[9px] font-mono tracking-wider text-gold bg-gold/10 px-1.5 py-0.5 rounded border border-gold/20">
+                            推荐
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-0.5 block text-[10px] font-serif tracking-wide text-gold-muted/70">
+                        {positionText}
+                      </span>
+                    </span>
+                    <span className={`h-2.5 w-2.5 rounded-full ${isSelected ? 'bg-gold shadow-[0_0_10px_rgba(201,167,106,0.8)]' : 'bg-gold/18'}`} />
+                  </button>
+                );
+              })}
+            </motion.div>
+          )}
+        </section>
+
+        {/* 情绪选择 */}
         <section className="flex flex-col gap-3">
           <div className="flex items-end justify-between gap-3">
             <div>
@@ -219,61 +325,6 @@ export default function HomeInquiryForm({
               className="self-start text-xs font-serif text-gold-muted underline-offset-2 hover:text-gold hover:underline"
             >
               展开全部情绪
-            </button>
-          )}
-        </section>
-
-        <section className="flex flex-col gap-3">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="text-xs font-mono uppercase tracking-[0.26em] text-gold-muted">Spread</p>
-              <h3 className="mt-1 text-sm font-serif tracking-widest text-gold">牌阵</h3>
-            </div>
-            {question.trim() && (
-              <p className="max-w-[160px] text-right text-xs font-serif leading-5 text-gold-muted">
-                推荐：{recommendedSpreadName}
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-col divide-y divide-gold/10 border-y border-gold/10">
-            {visibleSpreads.map((type) => {
-              const spread = spreads[type];
-              const isSelected = selectedSpread === type;
-              const positionText = spread.positions.length > 0 ? spread.positions.join(' / ') : '自由定义';
-
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  onClick={() => onSpreadChange(type)}
-                  className="grid min-h-[62px] grid-cols-[1fr_auto] items-center gap-4 py-3 text-left"
-                >
-                  <span>
-                    <span className={`block text-sm font-serif font-semibold tracking-widest ${isSelected ? 'text-gold' : 'text-foreground/85'}`}>
-                      {spread.name}
-                      {type === recommendedSpread && question.trim() && (
-                        <span className="ml-2 text-[10px] font-mono uppercase tracking-[0.18em] text-gold-muted">
-                          推荐
-                        </span>
-                      )}
-                    </span>
-                    <span className="mt-1 block text-xs font-serif tracking-wide text-gold-muted">
-                      {positionText}
-                    </span>
-                  </span>
-                  <span className={`h-2.5 w-2.5 rounded-full ${isSelected ? 'bg-gold shadow-[0_0_12px_rgba(201,167,106,0.8)]' : 'bg-gold/18'}`} />
-                </button>
-              );
-            })}
-          </div>
-          {!showAllSpreads && (
-            <button
-              type="button"
-              onClick={() => setShowAllSpreads(true)}
-              className="self-start text-xs font-serif text-gold-muted underline-offset-2 hover:text-gold hover:underline"
-            >
-              更多牌阵
             </button>
           )}
         </section>
@@ -328,9 +379,9 @@ export default function HomeInquiryForm({
         <motion.button
           type="submit"
           whileTap={{ scale: 0.98 }}
-          className="h-12 w-full rounded-full border border-gold/45 bg-gold/10 text-sm font-serif font-semibold tracking-[0.24em] text-gold shadow-gold-glow transition-all duration-300 hover:bg-gold/15 hover:border-gold"
+          className="h-12 w-full rounded-full border border-gold/45 bg-gold/10 text-sm font-serif font-semibold tracking-[0.24em] text-gold shadow-gold-glow transition-all duration-300 hover:bg-gold/15 hover:border-gold cursor-pointer"
         >
-          抽牌并生成解读
+          ✦ 踏入镜面 · 开始抽牌 ✦
         </motion.button>
       </form>
     </motion.section>
