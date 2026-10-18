@@ -5,13 +5,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 First, run the development server:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
 pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
@@ -37,23 +31,60 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ## Supabase 数据库初始化
 
-当前应用的日记同步依赖三张 Supabase 表：
+当前应用的账号、日记同步和 AI 记录依赖以下 Supabase 表：
 
 - `readings`
 - `checkins`
 - `monthly_reports`
+- `profiles`
+- `insight_snapshots`
+- `reading_generations`
+- `reading_messages`
+- `user_memory`
+- `action_items`
 
 初始化步骤：
 
-1. 打开 Supabase 项目的 SQL Editor。
-2. 复制并执行 [supabase/migrations/202606170001_init_journal_sync.sql](./supabase/migrations/202606170001_init_journal_sync.sql)。
+1. 将 Supabase 浏览器端配置写入 `.env.local`。
+2. 配置 `SUPABASE_DB_URL` 后执行完整迁移：
+
+```bash
+pnpm db:init
+```
+
+也可以打开 Supabase 项目的 SQL Editor，按文件名顺序执行 `supabase/migrations/*.sql`。
+
 3. 在项目根目录运行检查命令：
 
 ```bash
-npm run db:check
-npm run db:check:write
+pnpm db:check
 ```
 
-`db:check` 会检查表和字段是否可访问；`db:check:write` 会写入一组临时健康检查数据并立即删除，用来确认前端同步路径可用。
+`db:check` 只读检查表和字段是否可访问，不会写入或删除业务数据。
 
-注意：当前同步模式使用浏览器生成的 `device_id` 分组数据，适合未登录阶段的数据恢复体验。它不是账号级权限体系，正式账号功能上线后应改为基于 `auth.uid()` 的 RLS 策略。
+登录回调地址需要在 Supabase Authentication 的 URL Configuration 中加入：
+
+```text
+http://localhost:3005/auth/callback
+```
+
+生产环境还需要加入对应的正式域名回调地址。
+
+## AI 模型与成本配置
+
+复制 `.env.example` 中需要的配置到本地或部署环境：
+
+- 默认服务商为通义千问，深度模型默认使用 `qwen-plus`，快速模型使用 `qwen-turbo`。
+- 将 `AI_PROVIDER` 设为 `deepseek` 并配置 `DEEPSEEK_API_KEY`，即可切换到 DeepSeek。
+- 可分别设置 `AI_PROVIDER_FAST`、`AI_PROVIDER_DEEP` 和 `AI_PROVIDER_FALLBACK`，让不同层级使用不同服务商。
+- 每类请求都在服务端设置了最大输出 Token，客户端不能扩大该限制。
+- 模型返回的真实输入、缓存输入和输出 Token 会写入 `reading_generations`。
+- 人民币成本由实际 Token 与价格表计算。未知模型不会猜测价格，成本字段会保留为空；可通过 `AI_PRICE_*` 环境变量配置实际合同价格。
+
+部署前需要执行新增迁移：
+
+```bash
+supabase/migrations/202607180001_ai_usage_cost.sql
+```
+
+价格会随服务商调整，生产环境应定期核对价格，或通过环境变量覆盖内置价格。
