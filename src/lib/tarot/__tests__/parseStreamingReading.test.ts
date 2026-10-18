@@ -53,4 +53,28 @@ describe('parseStreamingReading', () => {
     expect(parsed.actionAdvice).toContain('今天散步');
     expect(parsed.gentleReminder).toContain('温柔提醒');
   });
+
+  it('tolerates markdown code fences and colon headings', () => {
+    const markdownWrapped = `\`\`\`markdown
+## SUMMARY:
+在关系中保持边界
+
+### CARD_READING_1 (现状):
+抽到了愚人，代表重新开始
+
+# ACTION_ADVICE:
+今天主动给朋友发个问候
+\`\`\``;
+
+    const parsed = parseStreamingReading(markdownWrapped, mockCards);
+    expect(parsed.intuitiveSummary).toContain('在关系中保持边界');
+    expect(parsed.cardReadings[0].interpretation).toContain('抽到了愚人');
+    expect(parsed.actionAdvice).toContain('今天主动给朋友发个问候');
+  });
+
+  it('safely handles unsegmented plain text as intuitiveSummary fallback', () => {
+    const plainText = '全国心理援助热线：400-161-9995。此刻安全与现实陪伴最重要。';
+    const parsed = parseStreamingReading(plainText, mockCards);
+    expect(parsed.intuitiveSummary).toContain('全国心理援助热线');
+  });
 });

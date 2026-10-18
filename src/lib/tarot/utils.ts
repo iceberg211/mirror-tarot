@@ -82,7 +82,7 @@ export function buildFollowUpSuggestions(input: {
 }
 
 export function parseStreamingReading(
-  text: string,
+  rawInput: string,
   cardCountOrCards: number | SelectedCard[]
 ): ParsedReading {
   const sections = {
@@ -97,33 +97,57 @@ export function parseStreamingReading(
   const isArray = Array.isArray(cardCountOrCards);
   const cardCount = isArray ? cardCountOrCards.length : cardCountOrCards;
   const cards = isArray ? cardCountOrCards : [];
-
   const cardReadings = Array(cardCount).fill('');
 
-  const parts = text.split('# ');
-  parts.forEach((part) => {
-    const lines = part.split('\n');
-    const title = lines[0].trim();
-    const body = lines.slice(1).join('\n').trim();
+  let text = (rawInput || '').trim();
+  // 剥除可能的 markdown 代码块外壳
+  if (text.startsWith('```')) {
+    text = text.replace(/^```[a-zA-Z]*\n?/, '').replace(/\n?```$/, '').trim();
+  }
 
-    if (title.startsWith('SUMMARY')) {
-      sections.intuitiveSummary = body;
-      sections.questionSummary = body.slice(0, 15) + '...';
-    } else if (title.startsWith('CARD_READING_')) {
-      const idx = parseInt(title.replace('CARD_READING_', ''), 10) - 1;
-      if (idx >= 0 && idx < cardCount) {
-        cardReadings[idx] = body;
+  // 正则拆分各个锚点：支持 # SUMMARY, ## SUMMARY:, ### CARD_READING_1 等
+  const regex = /(?:^|\n)#{1,3}\s*([A-Z0-9_]+)[^\n]*/g;
+  const matches: { key: string; index: number; length: number }[] = [];
+  let m: RegExpExecArray | null;
+
+  while ((m = regex.exec(text)) !== null) {
+    matches.push({
+      key: m[1],
+      index: m.index,
+      length: m[0].length,
+    });
+  }
+
+  if (matches.length > 0) {
+    for (let i = 0; i < matches.length; i += 1) {
+      const current = matches[i];
+      const start = current.index + current.length;
+      const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
+      const body = text.slice(start, end).trim();
+
+      if (current.key.startsWith('SUMMARY')) {
+        sections.intuitiveSummary = body;
+        sections.questionSummary = body.slice(0, 15) + '...';
+      } else if (current.key.startsWith('CARD_READING_')) {
+        const idx = parseInt(current.key.replace('CARD_READING_', ''), 10) - 1;
+        if (idx >= 0 && idx < cardCount) {
+          cardReadings[idx] = body;
+        }
+      } else if (current.key.startsWith('CONTRADICTION')) {
+        sections.contradiction = body;
+      } else if (current.key.startsWith('OVERLOOKED_FACTOR')) {
+        sections.overlookedFactor = body;
+      } else if (current.key.startsWith('ACTION_ADVICE')) {
+        sections.actionAdvice = body;
+      } else if (current.key.startsWith('GENTLE_REMINDER')) {
+        sections.gentleReminder = body;
       }
-    } else if (title.startsWith('CONTRADICTION')) {
-      sections.contradiction = body;
-    } else if (title.startsWith('OVERLOOKED_FACTOR')) {
-      sections.overlookedFactor = body;
-    } else if (title.startsWith('ACTION_ADVICE')) {
-      sections.actionAdvice = body;
-    } else if (title.startsWith('GENTLE_REMINDER')) {
-      sections.gentleReminder = body;
     }
-  });
+  } else if (text.length > 0) {
+    // 兜底容错：若没有标记锚点（如危机阻断纯文本），整段存入直觉总结，避免前端白屏
+    sections.intuitiveSummary = text;
+    sections.questionSummary = text.slice(0, 15) + '...';
+  }
 
   return {
     ...sections,
