@@ -16,8 +16,20 @@ create index if not exists readings_user_id_spread_type_idx
 alter table if exists public.checkins
   add column if not exists user_id uuid references auth.users(id) on delete cascade;
 
-alter table if exists public.checkins
-  add constraint checkins_user_id_date_key unique (user_id, date);
+-- 约束使用条件块创建，允许迁移脚本在中断后安全重跑。
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.checkins'::regclass
+      and conname = 'checkins_user_id_date_key'
+  ) then
+    alter table public.checkins
+      add constraint checkins_user_id_date_key unique (user_id, date);
+  end if;
+end
+$$;
 
 create index if not exists checkins_user_id_date_idx
   on public.checkins (user_id, date desc);
@@ -28,8 +40,19 @@ alter table if exists public.monthly_reports
 alter table if exists public.monthly_reports
   drop constraint if exists monthly_reports_pkey;
 
-alter table if exists public.monthly_reports
-  add constraint monthly_reports_user_id_key unique (user_id);
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.monthly_reports'::regclass
+      and conname = 'monthly_reports_user_id_key'
+  ) then
+    alter table public.monthly_reports
+      add constraint monthly_reports_user_id_key unique (user_id);
+  end if;
+end
+$$;
 
 create index if not exists monthly_reports_user_id_idx
   on public.monthly_reports (user_id);

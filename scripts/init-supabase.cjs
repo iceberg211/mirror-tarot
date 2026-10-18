@@ -61,7 +61,6 @@ function printMissingUrlHelp(migrationFiles) {
 async function runWithPg(databaseUrl, migrationFiles) {
   let Client;
   try {
-    // eslint-disable-next-line import/no-extraneous-dependencies
     ({ Client } = require('pg'));
   } catch {
     throw new Error('未安装 pg，请先运行：pnpm add -D pg');
