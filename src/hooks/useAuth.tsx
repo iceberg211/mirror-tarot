@@ -9,19 +9,28 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Session, User } from '@supabase/supabase-js';
-import { X, Mail, ShieldCheck } from 'lucide-react';
-import { ensureUserProfile, UserProfile } from '@/lib/auth/profile';
+import type { Session, User } from '@supabase/supabase-js';
+import AuthModal from '@/components/auth/AuthModal';
+import { describeAuthError } from '@/lib/auth/messages';
+import { ensureUserProfile, type UserProfile } from '@/lib/auth/profile';
 import {
   clearActiveUserId,
-  clearUserLocalCache,
+  clearSessionLocalCache,
+  countPendingLocalReadings,
   migrateGuestDataToUser,
   setActiveUserId,
   syncJournalData,
 } from '@/lib/db/localJournal';
 import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 
-type AuthStatus = 'loading' | 'guest' | 'authenticated' | 'unconfigured';
+export type AuthStatus = 'loading' | 'guest' | 'authenticated' | 'unconfigured';
+
+export interface SignOutResult {
+  /** 是否真的完成退出。false 表示因存在未同步记录被拦下 */
+  signedOut: boolean;
+  /** 本机尚未同步到云端的记录数 */
+  pendingCount: number;
+}
 
 interface AuthContextValue {
   user: User | null;
@@ -31,108 +40,13 @@ interface AuthContextValue {
   authModalOpen: boolean;
   authError: string;
   signInWithEmail: (email: string) => Promise<void>;
-  signOut: () => Promise<void>;
+  signOut: (options?: { force?: boolean }) => Promise<SignOutResult>;
   refreshSession: () => Promise<void>;
   openAuthModal: () => void;
   closeAuthModal: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-function AuthModal() {
-  const { authModalOpen, closeAuthModal, signInWithEmail, authError, status } = useAuth();
-  const [email, setEmail] = useState('');
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
-
-  if (!authModalOpen) return null;
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!email.trim() || sending) return;
-    setSending(true);
-    setSent(false);
-    try {
-      await signInWithEmail(email.trim());
-      setSent(true);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/72 px-6 backdrop-blur-md">
-      <div className="w-full max-w-sm border-y border-gold/20 bg-[#07090F]/95 py-6 shadow-[0_24px_80px_rgba(0,0,0,0.6)]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-mono uppercase tracking-[0.28em] text-gold-muted/55">
-              Mirror Account
-            </p>
-            <h2 className="mt-2 text-xl font-serif font-semibold tracking-widest text-gold">
-              保存你的镜面轨迹
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={closeAuthModal}
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-gold/15 text-gold-muted/70 transition-colors hover:border-gold/35 hover:text-gold"
-            aria-label="关闭登录弹窗"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <p className="mt-4 text-xs font-serif leading-6 tracking-wide text-foreground/72">
-          输入邮箱后，我们会发送一封登录链接。登录后，本机记录会迁移到你的账号，并用于长期画像。
-        </p>
-
-        {status === 'unconfigured' ? (
-          <div className="mt-5 border-y border-gold/12 py-4 text-[11px] font-serif leading-6 text-gold-muted/75">
-            Supabase 尚未配置，当前仍可继续使用游客模式和本机备份。
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4">
-            <label className="flex flex-col gap-2">
-              <span className="text-[10px] font-serif tracking-widest text-gold-muted/65">
-                邮箱地址
-              </span>
-              <span className="flex h-11 items-center gap-2 border-b border-gold/18 text-foreground focus-within:border-gold/45">
-                <Mail className="h-4 w-4 text-gold-muted/55" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@example.com"
-                  className="h-full flex-1 bg-transparent text-sm font-serif outline-none placeholder:text-gold-muted/30"
-                />
-              </span>
-            </label>
-
-            {authError && (
-              <p className="text-[10px] font-mono leading-5 text-red-300">{authError}</p>
-            )}
-
-            {sent && (
-              <div className="flex items-start gap-2 border-y border-gold/12 py-3 text-[11px] font-serif leading-6 text-gold-muted/80">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
-                登录链接已发送。请打开邮箱完成登录，链接会带你回到 Mirror Tarot。
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={sending}
-              className="h-11 rounded-full border border-gold/40 bg-gold/10 text-xs font-serif font-semibold tracking-[0.24em] text-gold transition-all hover:bg-gold/15 disabled:cursor-not-allowed disabled:opacity-55"
-            >
-              {sending ? '发送中...' : '发送登录链接'}
-            </button>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -141,26 +55,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>(isSupabaseConfigured ? 'loading' : 'unconfigured');
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authError, setAuthError] = useState('');
+
   const lastUserIdRef = useRef<string>('');
+  /** 已成功完成游客数据迁移的用户，避免重复迁移 */
   const handledUserIdsRef = useRef<Set<string>>(new Set());
+  /** 同一用户的会话水合只跑一次（回调页与 auth 事件可能并发触发） */
+  const hydrationRef = useRef<Map<string, Promise<void>>>(new Map());
+  /** 每次退出登录递增；用于丢弃退出后仍在途的水合结果 */
+  const epochRef = useRef(0);
 
-  const hydrateSignedInUser = useCallback(async (nextSession: Session) => {
-    const nextUser = nextSession.user;
-    setSession(nextSession);
-    setUser(nextUser);
-    setStatus('authenticated');
-    setActiveUserId(nextUser.id);
-    lastUserIdRef.current = nextUser.id;
-
-    const nextProfile = await ensureUserProfile(nextUser);
-    setProfile(nextProfile);
-
-    if (!handledUserIdsRef.current.has(nextUser.id)) {
-      handledUserIdsRef.current.add(nextUser.id);
-      await migrateGuestDataToUser(nextUser.id);
-    } else {
-      await syncJournalData();
+  const cleanupLocalSession = useCallback((userId: string) => {
+    epochRef.current += 1;
+    if (userId) {
+      // 必须连同 AI 结果缓存一起清掉，否则私密解读原文仍留在本机
+      clearSessionLocalCache(userId);
+      handledUserIdsRef.current.delete(userId);
     }
+    hydrationRef.current.clear();
+    clearActiveUserId();
+    lastUserIdRef.current = '';
+    setSession(null);
+    setUser(null);
+    setProfile(null);
+    setStatus('guest');
+    setAuthError('');
+  }, []);
+
+  const hydrateSignedInUser = useCallback((nextSession: Session): Promise<void> => {
+    const userId = nextSession.user.id;
+
+    const inFlight = hydrationRef.current.get(userId);
+    if (inFlight) return inFlight;
+
+    const epoch = epochRef.current;
+
+    const task = (async () => {
+      setSession(nextSession);
+      setUser(nextSession.user);
+      setStatus('authenticated');
+      setActiveUserId(userId);
+      lastUserIdRef.current = userId;
+
+      try {
+        const nextProfile = await ensureUserProfile(nextSession.user);
+        // 期间用户已退出：丢弃这次结果，避免退出后被重新点亮为已登录
+        if (epoch !== epochRef.current) return;
+        setProfile(nextProfile);
+
+        if (!handledUserIdsRef.current.has(userId)) {
+          // 先占位再 await：并发调用时只有一个会真正执行迁移
+          handledUserIdsRef.current.add(userId);
+          const migrated = await migrateGuestDataToUser(userId);
+          if (!migrated) handledUserIdsRef.current.delete(userId);
+        } else {
+          await syncJournalData();
+        }
+      } catch (error) {
+        console.error('Failed to hydrate auth state:', error);
+      }
+    })().finally(() => {
+      hydrationRef.current.delete(userId);
+    });
+
+    hydrationRef.current.set(userId, task);
+    return task;
   }, []);
 
   const refreshSession = useCallback(async () => {
@@ -179,51 +137,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (data.session) {
       await hydrateSignedInUser(data.session);
     } else {
-      setSession(null);
-      setUser(null);
-      setProfile(null);
-      setStatus('guest');
-      clearActiveUserId();
+      cleanupLocalSession('');
     }
-  }, [hydrateSignedInUser]);
+  }, [cleanupLocalSession, hydrateSignedInUser]);
 
   useEffect(() => {
-    if (!supabase) {
-      return;
-    }
+    if (!supabase) return;
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (event === 'SIGNED_OUT') {
-        const lastUserId = lastUserIdRef.current;
-        if (lastUserId) clearUserLocalCache(lastUserId);
-        clearActiveUserId();
-        lastUserIdRef.current = '';
-        setSession(null);
-        setUser(null);
-        setProfile(null);
-        setStatus('guest');
+        cleanupLocalSession(lastUserIdRef.current);
         return;
       }
 
-      if (nextSession) {
+      // token 刷新很频繁，只同步会话本身，不做画像写入与全量同步
+      if (event === 'TOKEN_REFRESHED') {
+        if (nextSession) {
+          setSession(nextSession);
+          setUser(nextSession.user);
+        }
+        return;
+      }
+
+      if (!nextSession) {
+        if (event === 'INITIAL_SESSION') cleanupLocalSession('');
+        return;
+      }
+
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+        // Supabase 要求回调内不要直接调用其它 auth 方法，放到下一个事件循环
         window.setTimeout(() => {
-          hydrateSignedInUser(nextSession).catch((error) => {
-            console.error('Failed to hydrate auth state:', error);
-            setStatus('guest');
-          });
+          void hydrateSignedInUser(nextSession);
         }, 0);
-      } else if (event === 'INITIAL_SESSION') {
-        clearActiveUserId();
-        setStatus('guest');
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [hydrateSignedInUser]);
+  }, [cleanupLocalSession, hydrateSignedInUser]);
 
   const signInWithEmail = useCallback(async (email: string) => {
     setAuthError('');
@@ -242,28 +196,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (error) {
-      setAuthError(error.message || '登录链接发送失败，请稍后再试。');
-      throw error;
+      const message = describeAuthError(error, '登录链接发送失败，请稍后再试。');
+      setAuthError(message);
+      throw new Error(message);
     }
   }, []);
 
-  const signOut = useCallback(async () => {
-    if (!supabase) {
+  const signOut = useCallback(
+    async (options?: { force?: boolean }): Promise<SignOutResult> => {
+      const pendingCount = countPendingLocalReadings();
+
+      // 未同步的记录一旦清缓存就永久丢失，先让调用方确认
+      if (pendingCount > 0 && !options?.force) {
+        return { signedOut: false, pendingCount };
+      }
+
       const lastUserId = lastUserIdRef.current;
-      if (lastUserId) clearUserLocalCache(lastUserId);
-      clearActiveUserId();
-      setSession(null);
-      setUser(null);
-      setProfile(null);
-      setStatus('guest');
-      return;
-    }
 
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      setAuthError(error.message || '退出登录失败。');
-    }
+      if (supabase) {
+        // 默认 scope 是 global，会把其它设备一起登出；这里只登出当前设备
+        const { error } = await supabase.auth.signOut({ scope: 'local' });
+        if (error && !options?.force) {
+          setAuthError(describeAuthError(error, '退出登录失败，请稍后重试。'));
+          return { signedOut: false, pendingCount };
+        }
+      }
+
+      cleanupLocalSession(lastUserId);
+      return { signedOut: true, pendingCount };
+    },
+    [cleanupLocalSession],
+  );
+
+  const openAuthModal = useCallback(() => {
+    setAuthError('');
+    setAuthModalOpen(true);
   }, []);
+
+  const closeAuthModal = useCallback(() => setAuthModalOpen(false), []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -276,15 +246,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signInWithEmail,
       signOut,
       refreshSession,
-      openAuthModal: () => {
-        setAuthError('');
-        setAuthModalOpen(true);
-      },
-      closeAuthModal: () => setAuthModalOpen(false),
+      openAuthModal,
+      closeAuthModal,
     }),
     [
       authError,
       authModalOpen,
+      closeAuthModal,
+      openAuthModal,
       profile,
       refreshSession,
       session,
@@ -298,7 +267,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={value}>
       {children}
-      <AuthModal />
+      <AuthModal
+        key={authModalOpen ? 'auth-modal-open' : 'auth-modal-closed'}
+        open={authModalOpen}
+        status={status}
+        error={authError}
+        onClose={closeAuthModal}
+        onSubmit={signInWithEmail}
+      />
     </AuthContext.Provider>
   );
 }

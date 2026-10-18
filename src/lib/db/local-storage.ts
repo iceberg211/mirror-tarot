@@ -35,6 +35,31 @@ export function clearUserLocalCache(userId: string): void {
   localStorage.removeItem(getScopedStorageKey(MONTHLY_REPORT_KEY, userId));
 }
 
+/** 清理游客迁移时留下的快照，避免长期占用 localStorage 配额 */
+export function clearMigrationBackups(): void {
+  if (typeof window === 'undefined') return;
+  const prefix = `${IMPORT_BACKUP_STORAGE_KEY}:guest-migrate:`;
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key?.startsWith(prefix)) keys.push(key);
+  }
+  keys.forEach((key) => localStorage.removeItem(key));
+}
+
+/**
+ * 退出登录时的完整清理。
+ * 除账号作用域的日记/打卡/报告外，还必须清掉 AI 结果缓存（含完整解读原文）
+ * 与游客迁移快照，否则共享设备上的下一位使用者仍能读到私密内容。
+ */
+export function clearSessionLocalCache(userId: string): void {
+  if (typeof window === 'undefined') return;
+  if (userId) clearUserLocalCache(userId);
+  localStorage.removeItem(CACHE_STORAGE_KEY);
+  localStorage.removeItem(IMPORT_BACKUP_STORAGE_KEY);
+  clearMigrationBackups();
+}
+
 export function getDeviceId(): string {
   if (typeof window === 'undefined') return '';
   let id = localStorage.getItem(DEVICE_ID_KEY);

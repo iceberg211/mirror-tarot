@@ -14,6 +14,8 @@ export type {
 
 export {
   clearActiveUserId,
+  clearMigrationBackups,
+  clearSessionLocalCache,
   clearUserLocalCache,
   getActiveUserId,
   getDeviceId,
@@ -22,8 +24,10 @@ export {
 } from './local-storage';
 
 export {
+  countPendingLocalReadings,
   deleteLocalReading,
   extractActionSeed,
+  getLatestActionSeed,
   getLocalCheckIns,
   getLocalMonthlyReport,
   getLocalReadingById,
@@ -32,11 +36,14 @@ export {
   saveLocalMonthlyReport,
   saveLocalReading,
   saveLocalZenReading,
+  setReadingActionSeed,
+  toggleActionSeedStatus,
   toggleStarReading,
   updateActionSeedStatus,
   updateChatHistory,
   updateJournalUserNotes,
   updateLocalReading,
+  type ActiveActionSeedItem,
 } from './journal-crud';
 
 export {

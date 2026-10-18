@@ -86,6 +86,19 @@ export async function ensureUserProfile(user: User): Promise<UserProfile | null>
     existing ? (existing as ProfileRow).onboarding_state : defaultOnboardingState,
   );
 
+  // 会话水合（含每次 token 刷新后的水合）都会走到这里。没有实际变化时
+  // 直接返回，避免无意义的 upsert 写入与 updated_at 抖动。
+  if (existing) {
+    const existingRow = existing as ProfileRow;
+    const stateChanged =
+      JSON.stringify(existingRow.onboarding_state ?? null) !== JSON.stringify(mergedState);
+    const emailChanged = existingRow.email !== email;
+
+    if (!stateChanged && !emailChanged) {
+      return mapProfileRow(existingRow);
+    }
+  }
+
   const { data, error } = await supabase
     .from('profiles')
     .upsert(
